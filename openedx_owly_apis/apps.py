@@ -3,6 +3,7 @@ openedx_owly_apis Django application initialization.
 """
 
 from django.apps import AppConfig
+from edx_django_utils.plugins.constants import PluginURLs, PluginSettings
 
 
 class OpenedxOwlyApisConfig(AppConfig):
@@ -15,13 +16,13 @@ class OpenedxOwlyApisConfig(AppConfig):
     plugin_app = {
         PluginURLs.CONFIG: {
             'cms.djangoapp': {
-                PluginURLs.NAMESPACE: 'openedx_owly',
-                PluginURLs.REGEX: r'^api/',
+                PluginURLs.NAMESPACE: 'openedx_owly_apis',
+                PluginURLs.REGEX: r'^api/v1/',
                 PluginURLs.RELATIVE_PATH: 'urls',
             },
             'lms.djangoapp': {
-                PluginURLs.NAMESPACE: 'openedx_owly',
-                PluginURLs.REGEX: r'^api/',
+                PluginURLs.NAMESPACE: 'openedx_owly_apis',
+                PluginURLs.REGEX: r'^api/v1/',
                 PluginURLs.RELATIVE_PATH: 'urls',
             },
         },

@@ -1,11 +1,13 @@
-import json
-import asyncio
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.permissions import IsAuthenticated
+from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
+from openedx.core.lib.api.authentication import BearerAuthenticationAllowInactiveUser
 
 # Importar funciones lógicas de analytics
-from openedx_owly_apis.operations.courses import (
+from openedx_owly_apis.operations.analytics import (
     get_overview_analytics_logic,
     get_enrollments_analytics_logic,
     get_discussions_analytics_logic,
@@ -16,7 +18,14 @@ from openedx_owly_apis.operations.courses import (
 class OpenedXAnalyticsViewSet(viewsets.ViewSet):
     """
     ViewSet para analíticas de cursos OpenedX
+    Requiere autenticación y permisos de administrador
     """
+    authentication_classes = (
+        JwtAuthentication,
+        BearerAuthenticationAllowInactiveUser,
+        SessionAuthentication,
+    )
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'], url_path='overview')
     def analytics_overview(self, request):
@@ -24,9 +33,8 @@ class OpenedXAnalyticsViewSet(viewsets.ViewSet):
         Get overview analytics for a specific course or platform-wide statistics
         """
         course_id = request.query_params.get('course_id')
-        result = asyncio.run(get_overview_analytics_logic(course_id))
-        result_data = json.loads(result)
-        return Response(result_data)
+        result = get_overview_analytics_logic(course_id)
+        return Response(result)
 
     @action(detail=False, methods=['get'], url_path='enrollments')
     def analytics_enrollments(self, request):
@@ -34,9 +42,8 @@ class OpenedXAnalyticsViewSet(viewsets.ViewSet):
         Get detailed enrollment analytics for a specific course
         """
         course_id = request.query_params.get('course_id')
-        result = asyncio.run(get_enrollments_analytics_logic(course_id))
-        result_data = json.loads(result)
-        return Response(result_data)
+        result = get_enrollments_analytics_logic(course_id)
+        return Response(result)
 
     @action(detail=False, methods=['get'], url_path='discussions')
     def analytics_discussions(self, request):
@@ -44,9 +51,8 @@ class OpenedXAnalyticsViewSet(viewsets.ViewSet):
         Get discussion forum analytics and configuration for a specific course
         """
         course_id = request.query_params.get('course_id')
-        result = asyncio.run(get_discussions_analytics_logic(course_id))
-        result_data = json.loads(result)
-        return Response(result_data)
+        result = get_discussions_analytics_logic(course_id)
+        return Response(result)
 
     @action(detail=False, methods=['get'], url_path='detailed')
     def analytics_detailed(self, request):
@@ -54,6 +60,5 @@ class OpenedXAnalyticsViewSet(viewsets.ViewSet):
         Get comprehensive detailed analytics combining all course data
         """
         course_id = request.query_params.get('course_id')
-        result = asyncio.run(get_detailed_analytics_logic(course_id))
-        result_data = json.loads(result)
-        return Response(result_data)
+        result = get_detailed_analytics_logic(course_id)
+        return Response(result)

@@ -2,13 +2,15 @@
 OpenedX Course Management ViewSet
 ViewSet simple que mapea directamente las funciones de lógica existentes
 """
-import json
-import asyncio
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.permissions import IsAuthenticated
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
+from openedx.core.lib.api.authentication import BearerAuthenticationAllowInactiveUser
 
 # Importar funciones lógicas originales
 from openedx_owly_apis.operations.courses import (
@@ -20,10 +22,17 @@ from openedx_owly_apis.operations.courses import (
     add_discussion_content_logic
 )
 
-class OpenedXCourseViewSet(viewsets.ModelViewSet):
+class OpenedXCourseViewSet(viewsets.ViewSet):
     """
     ViewSet para gestión de cursos OpenedX - mapeo directo de funciones MCP
+    Requiere autenticación y permisos de administrador
     """
+    authentication_classes = (
+        JwtAuthentication,
+        BearerAuthenticationAllowInactiveUser,
+        SessionAuthentication,
+    )
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['post'], url_path='create')
     def create_course(self, request):
@@ -32,17 +41,14 @@ class OpenedXCourseViewSet(viewsets.ModelViewSet):
         Mapea directamente a create_course_logic()
         """
         data = request.data
-        result = asyncio.run(create_course_logic(
+        result = create_course_logic(
             org=data.get('org'),
             course_number=data.get('course_number'),
             run=data.get('run'),
             display_name=data.get('display_name'),
             start_date=data.get('start_date')
-        ))
-
-        # Parsear el JSON string que retorna la función
-        result_data = json.loads(result)
-        return Response(result_data)
+        )
+        return Response(result)
 
     @action(detail=False, methods=['post'], url_path='structure')
     def create_structure(self, request):
@@ -51,14 +57,12 @@ class OpenedXCourseViewSet(viewsets.ModelViewSet):
         Mapea directamente a create_course_structure_logic()
         """
         data = request.data
-        result = asyncio.run(create_course_structure_logic(
+        result = create_course_structure_logic(
             course_id=data.get('course_id'),
             units_config=data.get('units_config'),
             edit=data.get('edit', False)
-        ))
-
-        result_data = json.loads(result)
-        return Response(result_data)
+        )
+        return Response(result)
 
     @action(detail=False, methods=['post'], url_path='content/html')
     def add_html_content(self, request):
@@ -67,13 +71,11 @@ class OpenedXCourseViewSet(viewsets.ModelViewSet):
         Mapea directamente a add_html_content_logic()
         """
         data = request.data
-        result = asyncio.run(add_html_content_logic(
+        result = add_html_content_logic(
             vertical_id=data.get('vertical_id'),
             html_config=data.get('html_config')
-        ))
-
-        result_data = json.loads(result)
-        return Response(result_data)
+        )
+        return Response(result)
 
     @action(detail=False, methods=['post'], url_path='content/video')
     def add_video_content(self, request):
@@ -82,13 +84,11 @@ class OpenedXCourseViewSet(viewsets.ModelViewSet):
         Mapea directamente a add_video_content_logic()
         """
         data = request.data
-        result = asyncio.run(add_video_content_logic(
+        result = add_video_content_logic(
             vertical_id=data.get('vertical_id'),
             video_config=data.get('video_config')
-        ))
-
-        result_data = json.loads(result)
-        return Response(result_data)
+        )
+        return Response(result)
 
     @action(detail=False, methods=['post'], url_path='content/problem')
     def add_problem_content(self, request):
@@ -97,13 +97,11 @@ class OpenedXCourseViewSet(viewsets.ModelViewSet):
         Mapea directamente a add_problem_content_logic()
         """
         data = request.data
-        result = asyncio.run(add_problem_content_logic(
+        result = add_problem_content_logic(
             vertical_id=data.get('vertical_id'),
             problem_config=data.get('problem_config')
-        ))
-
-        result_data = json.loads(result)
-        return Response(result_data)
+        )
+        return Response(result)
 
     @action(detail=False, methods=['post'], url_path='content/discussion')
     def add_discussion_content(self, request):
@@ -112,11 +110,9 @@ class OpenedXCourseViewSet(viewsets.ModelViewSet):
         Mapea directamente a add_discussion_content_logic()
         """
         data = request.data
-        result = asyncio.run(add_discussion_content_logic(
+        result = add_discussion_content_logic(
             vertical_id=data.get('vertical_id'),
             discussion_config=data.get('discussion_config')
-        ))
-
-        result_data = json.loads(result)
-        return Response(result_data)
+        )
+        return Response(result)
 

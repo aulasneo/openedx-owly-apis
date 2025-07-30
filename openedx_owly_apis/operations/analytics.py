@@ -24,19 +24,14 @@ from common.djangoapps.student.models import CourseEnrollment
 
 from django.contrib.auth import get_user_model
 
-# Imports necesarios
-from cms.djangoapps.contentstore.views.course import create_new_course_in_store
-
 from xmodule.modulestore import ModuleStoreEnum
 from xmodule.modulestore.exceptions import DuplicateCourseError
-from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
 
-@sync_to_async
 def get_overview_analytics_logic(course_id: str = None):
     """Estadísticas generales usando CourseOverview y CourseEnrollment"""
     try:
@@ -87,7 +82,6 @@ def get_overview_analytics_logic(course_id: str = None):
         return {"error": f"Error getting overview analytics: {str(e)}"}
 
 
-@sync_to_async
 def get_enrollments_analytics_logic(course_id: str):
     """Analíticas detalladas de inscripciones usando enrollments.data APIs"""
     try:
@@ -134,7 +128,6 @@ def get_enrollments_analytics_logic(course_id: str):
         return {"error": f"Error getting enrollment analytics: {str(e)}"}
 
 
-@sync_to_async
 def get_discussions_analytics_logic(course_id: str):
     """Analíticas de discusiones usando discussions.models"""
     try:
@@ -171,7 +164,6 @@ def get_discussions_analytics_logic(course_id: str):
         return {"error": f"Error getting discussions analytics: {str(e)}"}
 
 
-@sync_to_async
 def get_detailed_analytics_logic(course_id: str):
     """Análisis completo combinando múltiples APIs"""
     try:

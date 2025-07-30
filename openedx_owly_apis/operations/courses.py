@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta
 
 from django.db.models import Count
+from django.db import transaction
 from django.utils import timezone
 from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
 from opaque_keys.edx.keys import CourseKey
@@ -24,8 +25,8 @@ from common.djangoapps.student.models import CourseEnrollment
 
 from django.contrib.auth import get_user_model
 
-# Imports necesarios
-from cms.djangoapps.contentstore.views.course import create_new_course_in_store
+# Imports necesarios - lazy import to avoid SearchAccess model conflict
+# from cms.djangoapps.contentstore.views.course import create_new_course_in_store
 
 from xmodule.modulestore import ModuleStoreEnum
 from xmodule.modulestore.exceptions import DuplicateCourseError
@@ -36,9 +37,8 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
-@sync_to_async
-async def create_course_logic(org: str, course_number: str, run: str,
-                              display_name: str, start_date: str = None) -> str:
+def create_course_logic(org: str, course_number: str, run: str,
+                        display_name: str, start_date: str = None) -> dict:
     """Crea un nuevo curso usando create_new_course_in_store"""
 
     try:
@@ -119,9 +119,11 @@ def extract_section_number(name: str) -> str:
     return match.group(1) if match else None
 
 
+@transaction.atomic
 def sync_xblock_structure(parent, store, admin_user, category, desired_items, edit=False):
     """Sincroniza estructura: agrega faltantes, actualiza existentes"""
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
+    from django.db import transaction
 
     def find_existing_by_name_or_number(name, children):
         target_number = extract_section_number(name)
@@ -134,6 +136,9 @@ def sync_xblock_structure(parent, store, admin_user, category, desired_items, ed
         return None
 
     results = []
+    items_to_update = []
+    
+    # Primero, recolectar todos los items que necesitan actualización
     for desired_item in desired_items:
         name = desired_item['name']
         existing = find_existing_by_name_or_number(name, parent.children)
@@ -142,8 +147,7 @@ def sync_xblock_structure(parent, store, admin_user, category, desired_items, ed
             # ACTUALIZAR nombre si cambió
             if existing.display_name != name:
                 existing.display_name = name
-                store.update_item(existing, admin_user.id)
-                logger.info(f"Updated {category} name: {existing.display_name} -> {name}")
+                items_to_update.append((existing, name))
             results.append((existing, desired_item))
         else:
             # CREAR nuevo si no existe (siempre en modo edit, o si es creación inicial)
@@ -155,11 +159,29 @@ def sync_xblock_structure(parent, store, admin_user, category, desired_items, ed
             )
             logger.info(f"Created new {category}: {name}")
             results.append((new_item, desired_item))
+    
+    # Ahora actualizar todos los items en una sola transacción
+    if items_to_update:
+        try:
+            with transaction.atomic():
+                for item, new_name in items_to_update:
+                    store.update_item(item, admin_user.id)
+                    logger.info(f"Updated {category} name: {item.display_name} -> {new_name}")
+        except Exception as e:
+            logger.error(f"Error updating {category} items in batch: {str(e)}")
+            # Fallback: intentar actualizar uno por uno con delay
+            import time
+            for item, new_name in items_to_update:
+                try:
+                    store.update_item(item, admin_user.id)
+                    logger.info(f"Updated {category} name (fallback): {item.display_name} -> {new_name}")
+                    time.sleep(0.1)  # Small delay to reduce contention
+                except Exception as fallback_error:
+                    logger.error(f"Failed to update {category} {new_name}: {str(fallback_error)}")
 
     return results
 
-@sync_to_async
-async def create_course_structure_logic(course_id: str, units_config: dict, edit: bool = False):
+def create_course_structure_logic(course_id: str, units_config: dict, edit: bool = False):
     """Crea/edita la estructura completa del curso: chapters, sequentials y verticals con sincronización inteligente"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
@@ -303,8 +325,7 @@ async def create_course_structure_logic(course_id: str, units_config: dict, edit
             "course_id": course_id
         }
 
-@sync_to_async
-async def add_discussion_content_logic(vertical_id: str, discussion_config: dict):
+def add_discussion_content_logic(vertical_id: str, discussion_config: dict):
     """Add discussion content component to a vertical"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
@@ -350,8 +371,7 @@ async def add_discussion_content_logic(vertical_id: str, discussion_config: dict
         return {"success": False, "error": str(e)}
 
 
-@sync_to_async
-async def add_problem_content_logic(vertical_id: str, problem_config: dict):
+def add_problem_content_logic(vertical_id: str, problem_config: dict):
     """Add problem content component to a vertical"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
@@ -431,8 +451,7 @@ async def add_problem_content_logic(vertical_id: str, problem_config: dict):
         return {"success": False, "error": str(e)}
 
 
-@sync_to_async
-async def add_video_content_logic(vertical_id: str, video_config: dict):
+def add_video_content_logic(vertical_id: str, video_config: dict):
     """Add video content component to a vertical"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
@@ -493,8 +512,7 @@ async def add_video_content_logic(vertical_id: str, video_config: dict):
         return {"success": False, "error": str(e)}
 
 
-@sync_to_async
-async def add_html_content_logic(vertical_id: str, html_config: dict):
+def add_html_content_logic(vertical_id: str, html_config: dict):
     """Add HTML content component to a vertical"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock

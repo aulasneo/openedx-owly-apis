@@ -161,10 +161,10 @@ setup(
 
     entry_points={
         "lms.djangoapp": [
-            "openedx_owly = openedx_owly.apps:OpenedxOwlyConfig",
+            "openedx_owly_apis = openedx_owly_apis.apps:OpenedxOwlyApisConfig",
         ],
         "cms.djangoapp": [
-            "openedx_owly = openedx_owly.apps:OpenedxOwlyConfig",
+            "openedx_owly_apis = openedx_owly_apis.apps:OpenedxOwlyApisConfig",
         ],
     },
 )
