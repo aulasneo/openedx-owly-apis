@@ -11,6 +11,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
 from openedx.core.lib.api.authentication import BearerAuthenticationAllowInactiveUser
+from openedx_owly_apis.permissions import IsCourseCreator, IsCourseStaff
 
 # Importar funciones lógicas originales
 from openedx_owly_apis.operations.courses import (
@@ -34,7 +35,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=['post'], url_path='create')
+    @action(detail=False, methods=['post'], url_path='create', permission_classes=[IsAuthenticated, IsCourseCreator])
     def create_course(self, request):
         """
         Crear un nuevo curso OpenedX
@@ -50,7 +51,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         )
         return Response(result)
 
-    @action(detail=False, methods=['post'], url_path='structure')
+    @action(detail=False, methods=['post'], url_path='structure', permission_classes=[IsAuthenticated, IsCourseCreator, IsCourseStaff])
     def create_structure(self, request):
         """
         Crear/editar estructura del curso
@@ -64,7 +65,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         )
         return Response(result)
 
-    @action(detail=False, methods=['post'], url_path='content/html')
+    @action(detail=False, methods=['post'], url_path='content/html', permission_classes=[IsAuthenticated, IsCourseCreator, IsCourseStaff])
     def add_html_content(self, request):
         """
         Añadir contenido HTML a un vertical
@@ -77,7 +78,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         )
         return Response(result)
 
-    @action(detail=False, methods=['post'], url_path='content/video')
+    @action(detail=False, methods=['post'], url_path='content/video', permission_classes=[IsAuthenticated, IsCourseCreator, IsCourseStaff])
     def add_video_content(self, request):
         """
         Añadir contenido de video a un vertical
@@ -90,7 +91,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         )
         return Response(result)
 
-    @action(detail=False, methods=['post'], url_path='content/problem')
+    @action(detail=False, methods=['post'], url_path='content/problem', permission_classes=[IsAuthenticated, IsCourseCreator, IsCourseStaff])
     def add_problem_content(self, request):
         """
         Añadir problemas/ejercicios a un vertical
@@ -103,7 +104,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         )
         return Response(result)
 
-    @action(detail=False, methods=['post'], url_path='content/discussion')
+    @action(detail=False, methods=['post'], url_path='content/discussion', permission_classes=[IsAuthenticated, IsCourseCreator, IsCourseStaff])
     def add_discussion_content(self, request):
         """
         Añadir foros de discusión a un vertical
