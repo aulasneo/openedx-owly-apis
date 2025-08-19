@@ -95,3 +95,41 @@ class IsCourseStaff(BasePermission):
             or CourseStaffRole(course_key).has_user(user)
             or CourseLimitedStaffRole(course_key).has_user(user)
         )
+
+
+class IsAdminOrCourseCreator(BasePermission):
+    """Permite acceso a admin (superuser o staff) o a Course Creator."""
+
+    message = "User must be admin or Course Creator"
+
+    def has_permission(self, request, view) -> bool:
+        user = request.user
+        if not getattr(user, "is_authenticated", False):
+            return False
+
+        # Bypass para administradores del sitio Open edX
+        if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+            return True
+
+        return IsCourseCreator().has_permission(request, view)
+
+
+class IsAdminOrCourseCreatorOrCourseStaff(BasePermission):
+    """Permite acceso a admin, Course Creator o Course Staff (instructor/staff/limited)."""
+
+    message = "User must be admin, Course Creator or Course Staff"
+
+    def has_permission(self, request, view) -> bool:
+        user = request.user
+        if not getattr(user, "is_authenticated", False):
+            return False
+
+        # Bypass para administradores del sitio Open edX
+        if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+            return True
+
+        # OR entre creador de curso y staff del curso
+        return (
+            IsCourseCreator().has_permission(request, view)
+            or IsCourseStaff().has_permission(request, view)
+        )
