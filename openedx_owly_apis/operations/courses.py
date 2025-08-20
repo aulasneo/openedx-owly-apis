@@ -37,8 +37,104 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
+def _resolve_user(user_identifier):
+    """Resolve a user by id, username, or email. Returns User or None."""
+    try:
+        if user_identifier is None:
+            return None
+        # Numeric id
+        if isinstance(user_identifier, int) or (isinstance(user_identifier, str) and user_identifier.isdigit()):
+            return User.objects.filter(id=int(user_identifier)).first()
+        # Email
+        if isinstance(user_identifier, str) and "@" in user_identifier:
+            return User.objects.filter(email__iexact=user_identifier).first()
+        # Username
+        return User.objects.filter(username=user_identifier).first()
+    except Exception:  # pragma: no cover - best effort
+        logger.exception("_resolve_user failed")
+        return None
+
+
+def _get_acting_user(user_identifier):
+    """Get acting user. Prefer provided identifier; fallback to superuser with warning."""
+    user = _resolve_user(user_identifier)
+    if user:
+        return user
+    # Fallback for backward compatibility
+    fallback = User.objects.filter(is_superuser=True).first()
+    if not fallback:
+        return None
+    logger.warning(
+        "No matching user for identifier '%s'. Falling back to superuser '%s' (id=%s)",
+        user_identifier,
+        fallback.username,
+        fallback.id,
+    )
+    return fallback
+
+
+def _validate_vertical_id(vertical_id):
+    """Validate vertical_id string and fetch parent item.
+
+    Returns tuple: (store, parent_item, usage_key_str, error_dict_or_none)
+    """
+    from xmodule.modulestore.django import modulestore
+    try:
+        from opaque_keys.edx.keys import UsageKey
+    except Exception:  # pragma: no cover
+        UsageKey = None
+
+    if not vertical_id:
+        return None, None, None, {
+            "success": False,
+            "error": "invalid_vertical_id",
+            "message": "vertical_id is required",
+        }
+
+    # Try to parse the usage key
+    try:
+        if UsageKey is None:
+            raise ValueError("opaque_keys UsageKey not available")
+        usage_key = UsageKey.from_string(str(vertical_id))
+    except Exception as e:
+        logger.error("vertical_id parse failed: %s | raw=%s", str(e), vertical_id)
+        return None, None, None, {
+            "success": False,
+            "error": "invalid_vertical_id_format",
+            "message": f"vertical_id must be a full UsageKey (e.g., block-v1:ORG+NUM+RUN+type@vertical+block@GUID). Got: {vertical_id}",
+        }
+
+    store = modulestore()
+    try:
+        parent_item = store.get_item(usage_key)
+    except Exception as e:
+        logger.error("modulestore.get_item failed for %s: %s", str(usage_key), str(e))
+        return store, None, str(usage_key), {
+            "success": False,
+            "error": "vertical_not_found",
+            "message": f"No item found for vertical_id: {vertical_id}",
+        }
+
+    if not parent_item:
+        return store, None, str(usage_key), {
+            "success": False,
+            "error": "vertical_not_found",
+            "message": f"No item found for vertical_id: {vertical_id}",
+        }
+
+    if getattr(parent_item, 'category', None) != 'vertical':
+        return store, parent_item, str(usage_key), {
+            "success": False,
+            "error": "invalid_parent_category",
+            "message": f"Parent category is '{getattr(parent_item, 'category', None)}', expected 'vertical'",
+        }
+
+    return store, parent_item, str(usage_key), None
+
+
 def create_course_logic(org: str, course_number: str, run: str,
-                        display_name: str, start_date: str = None) -> dict:
+                        display_name: str, start_date: str = None,
+                        user_identifier=None) -> dict:
     """Crea un nuevo curso usando create_new_course_in_store"""
 
     try:
@@ -61,13 +157,17 @@ def create_course_logic(org: str, course_number: str, run: str,
         if display_name:
             fields['display_name'] = display_name
 
-        # Get admin user (in Tutor, there should be superuser)
-        admin_user = User.objects.filter(is_superuser=True).first()
+        # Get acting user (requesting user or superuser fallback)
+        acting_user = _get_acting_user(user_identifier)
+
+        if not acting_user:
+            logger.error("No acting user available for course creation. identifier=%s", user_identifier)
+            return {"success": False, "error": "no_user", "message": "No acting user available"}
 
         # This is the RIGHT approach for Tutor!
         new_course = create_new_course_in_store(
             ModuleStoreEnum.Type.split,
-            admin_user,
+            acting_user,
             org,
             course_number,
             run,
@@ -85,7 +185,7 @@ def create_course_logic(org: str, course_number: str, run: str,
                 "org": new_course.org,
                 "number": new_course.display_number_with_default,
                 "run": new_course.id.run,
-                "created_by": admin_user.username,
+                "created_by": acting_user.username,
                 "studio_url": f"/course/{new_course.id}",
                 "lms_url": f"/courses/{new_course.id}/about"
             }
@@ -108,7 +208,8 @@ def create_course_logic(org: str, course_number: str, run: str,
                 "check_database": "Verify MongoDB container is accessible",
                 "check_settings": "Ensure Django settings match CMS",
                 "check_permissions": "Verify admin user permissions"
-            }
+            },
+            "requested_by": str(user_identifier)
         }
 
 
@@ -120,7 +221,7 @@ def extract_section_number(name: str) -> str:
 
 
 @transaction.atomic
-def sync_xblock_structure(parent, store, admin_user, category, desired_items, edit=False):
+def sync_xblock_structure(parent, store, acting_user, category, desired_items, edit=False):
     """Sincroniza estructura: agrega faltantes, actualiza existentes"""
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
     from django.db import transaction
@@ -135,9 +236,13 @@ def sync_xblock_structure(parent, store, admin_user, category, desired_items, ed
                 return item
         return None
 
+    logger.info(
+        "sync_xblock_structure start category=%s parent=%s desired_count=%s edit=%s acting_user=%s",
+        category, str(getattr(parent, 'location', None)), len(desired_items or []), edit, getattr(acting_user, 'username', None)
+    )
     results = []
     items_to_update = []
-    
+
     # Primero, recolectar todos los items que necesitan actualización
     for desired_item in desired_items:
         name = desired_item['name']
@@ -153,19 +258,19 @@ def sync_xblock_structure(parent, store, admin_user, category, desired_items, ed
             # CREAR nuevo si no existe (siempre en modo edit, o si es creación inicial)
             new_item = create_xblock(
                 parent_locator=str(parent.location),
-                user=admin_user,
+                user=acting_user,
                 category=category,
                 display_name=name
             )
             logger.info(f"Created new {category}: {name}")
             results.append((new_item, desired_item))
-    
+
     # Ahora actualizar todos los items en una sola transacción
     if items_to_update:
         try:
             with transaction.atomic():
                 for item, new_name in items_to_update:
-                    store.update_item(item, admin_user.id)
+                    store.update_item(item, acting_user.id)
                     logger.info(f"Updated {category} name: {item.display_name} -> {new_name}")
         except Exception as e:
             logger.error(f"Error updating {category} items in batch: {str(e)}")
@@ -173,7 +278,7 @@ def sync_xblock_structure(parent, store, admin_user, category, desired_items, ed
             import time
             for item, new_name in items_to_update:
                 try:
-                    store.update_item(item, admin_user.id)
+                    store.update_item(item, acting_user.id)
                     logger.info(f"Updated {category} name (fallback): {item.display_name} -> {new_name}")
                     time.sleep(0.1)  # Small delay to reduce contention
                 except Exception as fallback_error:
@@ -181,7 +286,8 @@ def sync_xblock_structure(parent, store, admin_user, category, desired_items, ed
 
     return results
 
-def create_course_structure_logic(course_id: str, units_config: dict, edit: bool = False):
+
+def create_course_structure_logic(course_id: str, units_config: dict, edit: bool = False, user_identifier=None):
     """Crea/edita la estructura completa del curso: chapters, sequentials y verticals con sincronización inteligente"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
@@ -192,11 +298,11 @@ def create_course_structure_logic(course_id: str, units_config: dict, edit: bool
     try:
         User = get_user_model()
         course_key = CourseKey.from_string(course_id)
-        admin_user = User.objects.filter(is_superuser=True).first()
+        acting_user = _get_acting_user(user_identifier)
 
-        if not admin_user:
-            logger.error("No admin user found")
-            return {"error": "No admin user found"}
+        if not acting_user:
+            logger.error("No acting user available for structure creation. identifier=%s", user_identifier)
+            return {"error": "No acting user available"}
 
         store = modulestore()
         course = store.get_course(course_key)
@@ -208,11 +314,16 @@ def create_course_structure_logic(course_id: str, units_config: dict, edit: bool
         course_locator = str(course.location)
         created_structure = []
 
+        logger.info(
+            "create_course_structure start course_id=%s edit=%s acting_user=%s units_top=%s",
+            course_id, edit, getattr(acting_user, 'username', None), len(units_config.get('units', [])) if units_config else 0
+        )
+
         # 1. Sincronizar Chapters usando la nueva lógica
         chapter_results = sync_xblock_structure(
             parent=course,
             store=store,
-            admin_user=admin_user,
+            acting_user=acting_user,
             category='chapter',
             desired_items=units_config.get('units', []),
             edit=edit
@@ -227,7 +338,7 @@ def create_course_structure_logic(course_id: str, units_config: dict, edit: bool
                 subsection_results = sync_xblock_structure(
                     parent=chapter,
                     store=store,
-                    admin_user=admin_user,
+                    acting_user=acting_user,
                     category='sequential',
                     desired_items=unit_config['subsections_list'],
                     edit=edit
@@ -240,7 +351,7 @@ def create_course_structure_logic(course_id: str, units_config: dict, edit: bool
                         vertical_results = sync_xblock_structure(
                             parent=subsection,
                             store=store,
-                            admin_user=admin_user,
+                            acting_user=acting_user,
                             category='vertical',
                             desired_items=subsection_info['verticals_list'],
                             edit=edit
@@ -270,7 +381,7 @@ def create_course_structure_logic(course_id: str, units_config: dict, edit: bool
                 subsection_results = sync_xblock_structure(
                     parent=chapter,
                     store=store,
-                    admin_user=admin_user,
+                    acting_user=acting_user,
                     category='sequential',
                     desired_items=generic_subsections,
                     edit=edit
@@ -284,7 +395,7 @@ def create_course_structure_logic(course_id: str, units_config: dict, edit: bool
                     vertical_results = sync_xblock_structure(
                         parent=subsection,
                         store=store,
-                        admin_user=admin_user,
+                        acting_user=acting_user,
                         category='vertical',
                         desired_items=generic_verticals,
                         edit=edit
@@ -322,10 +433,12 @@ def create_course_structure_logic(course_id: str, units_config: dict, edit: bool
         return {
             "success": False,
             "error": str(e),
-            "course_id": course_id
+            "course_id": course_id,
+            "requested_by": str(user_identifier)
         }
 
-def add_discussion_content_logic(vertical_id: str, discussion_config: dict):
+
+def add_discussion_content_logic(vertical_id: str, discussion_config: dict, user_identifier=None):
     """Add discussion content component to a vertical"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
@@ -333,11 +446,19 @@ def add_discussion_content_logic(vertical_id: str, discussion_config: dict):
     from xmodule.modulestore.django import modulestore
 
     try:
+        logger.info(
+            "add_discussion_content start vertical_id=%s requested_by=%s payload_keys=%s",
+            vertical_id, str(user_identifier), list((discussion_config or {}).keys())
+        )
         User = get_user_model()
-        admin_user = User.objects.filter(is_superuser=True).first()
+        acting_user = _get_acting_user(user_identifier)
 
-        if not admin_user:
-            return {"success": False, "error": "No admin user found"}
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+
+        store, parent_item, usage_key_str, err = _validate_vertical_id(vertical_id)
+        if err:
+            return err
 
         # Preparar metadata para discussion component
         metadata = {
@@ -345,14 +466,14 @@ def add_discussion_content_logic(vertical_id: str, discussion_config: dict):
         }
 
         component = create_xblock(
-            parent_locator=vertical_id,
-            user=admin_user,
+            parent_locator=str(parent_item.location),
+            user=acting_user,
             category='discussion',
             display_name=metadata['display_name']
         )
 
         # Configurar campos específicos de discussion
-        store = modulestore()
+        # store is already available from validation
 
         # Configurar categoría de discusión
         if 'discussion_category' in discussion_config:
@@ -362,16 +483,16 @@ def add_discussion_content_logic(vertical_id: str, discussion_config: dict):
         if 'discussion_target' in discussion_config:
             component.discussion_target = discussion_config['discussion_target']
 
-        store.update_item(component, admin_user.id)
+        store.update_item(component, acting_user.id)
 
-        return {"success": True, "component_id": str(component.location)}
+        return {"success": True, "component_id": str(component.location), "parent_vertical": usage_key_str}
 
     except Exception as e:
         logger.exception(f"Error creating discussion content: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "vertical_id": vertical_id, "requested_by": str(user_identifier)}
 
 
-def add_problem_content_logic(vertical_id: str, problem_config: dict):
+def add_problem_content_logic(vertical_id: str, problem_config: dict, user_identifier=None):
     """Add problem content component to a vertical"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
@@ -379,11 +500,19 @@ def add_problem_content_logic(vertical_id: str, problem_config: dict):
     from xmodule.modulestore.django import modulestore
 
     try:
+        logger.info(
+            "add_problem_content start vertical_id=%s requested_by=%s payload_keys=%s",
+            vertical_id, str(user_identifier), list((problem_config or {}).keys())
+        )
         User = get_user_model()
-        admin_user = User.objects.filter(is_superuser=True).first()
+        acting_user = _get_acting_user(user_identifier)
 
-        if not admin_user:
-            return {"success": False, "error": "No admin user found"}
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+
+        store, parent_item, usage_key_str, err = _validate_vertical_id(vertical_id)
+        if err:
+            return err
 
         # Preparar metadata para problem component
         metadata = {
@@ -400,8 +529,8 @@ def add_problem_content_logic(vertical_id: str, problem_config: dict):
             boilerplate = 'blank_common'
 
         component = create_xblock(
-            parent_locator=vertical_id,
-            user=admin_user,
+            parent_locator=str(parent_item.location),
+            user=acting_user,
             category='problem',
             display_name=metadata['display_name'],
             boilerplate=boilerplate
@@ -441,17 +570,16 @@ def add_problem_content_logic(vertical_id: str, problem_config: dict):
         if 'max_attempts' in problem_config:
             component.max_attempts = problem_config['max_attempts']
 
-        store = modulestore()
-        store.update_item(component, admin_user.id)
+        store.update_item(component, acting_user.id)
 
-        return {"success": True, "component_id": str(component.location)}
+        return {"success": True, "component_id": str(component.location), "parent_vertical": usage_key_str}
 
     except Exception as e:
         logger.exception(f"Error creating problem content: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "vertical_id": vertical_id, "requested_by": str(user_identifier)}
 
 
-def add_video_content_logic(vertical_id: str, video_config: dict):
+def add_video_content_logic(vertical_id: str, video_config: dict, user_identifier=None):
     """Add video content component to a vertical"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
@@ -459,11 +587,19 @@ def add_video_content_logic(vertical_id: str, video_config: dict):
     from xmodule.modulestore.django import modulestore
 
     try:
+        logger.info(
+            "add_video_content start vertical_id=%s requested_by=%s payload_keys=%s",
+            vertical_id, str(user_identifier), list((video_config or {}).keys())
+        )
         User = get_user_model()
-        admin_user = User.objects.filter(is_superuser=True).first()
+        acting_user = _get_acting_user(user_identifier)
 
-        if not admin_user:
-            return {"success": False, "error": "No admin user found"}
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+
+        store, parent_item, usage_key_str, err = _validate_vertical_id(vertical_id)
+        if err:
+            return err
 
         # Preparar metadata para video component
         metadata = {
@@ -471,8 +607,8 @@ def add_video_content_logic(vertical_id: str, video_config: dict):
         }
 
         component = create_xblock(
-            parent_locator=vertical_id,
-            user=admin_user,
+            parent_locator=str(parent_item.location),
+            user=acting_user,
             category='video',
             display_name=metadata['display_name']
         )
@@ -503,27 +639,35 @@ def add_video_content_logic(vertical_id: str, video_config: dict):
         if 'download_video' in video_config:
             component.download_video = video_config['download_video']
 
-        store.update_item(component, admin_user.id)
+        store.update_item(component, acting_user.id)
 
-        return {"success": True, "component_id": str(component.location)}
+        return {"success": True, "component_id": str(component.location), "parent_vertical": usage_key_str}
 
     except Exception as e:
         logger.exception(f"Error creating video content: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "vertical_id": vertical_id, "requested_by": str(user_identifier)}
 
 
-def add_html_content_logic(vertical_id: str, html_config: dict):
+def add_html_content_logic(vertical_id: str, html_config: dict, user_identifier=None):
     """Add HTML content component to a vertical"""
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
     from django.contrib.auth import get_user_model
 
     try:
+        logger.info(
+            "add_html_content start vertical_id=%s requested_by=%s payload_keys=%s",
+            vertical_id, str(user_identifier), list((html_config or {}).keys())
+        )
         User = get_user_model()
-        admin_user = User.objects.filter(is_superuser=True).first()
+        acting_user = _get_acting_user(user_identifier)
 
-        if not admin_user:
-            return {"success": False, "error": "No admin user found"}
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+
+        store, parent_item, usage_key_str, err = _validate_vertical_id(vertical_id)
+        if err:
+            return err
 
         # Preparar metadata para HTML component
         metadata = {
@@ -534,8 +678,8 @@ def add_html_content_logic(vertical_id: str, html_config: dict):
         data = html_config.get('content', '<p>Default HTML content</p>')
 
         component = create_xblock(
-            parent_locator=vertical_id,
-            user=admin_user,
+            parent_locator=str(parent_item.location),
+            user=acting_user,
             category='html',
             display_name=metadata['display_name']
         )
@@ -543,12 +687,10 @@ def add_html_content_logic(vertical_id: str, html_config: dict):
         # Actualizar el contenido del componente
         if data:
             component.data = data
-            from xmodule.modulestore.django import modulestore
-            store = modulestore()
-            store.update_item(component, admin_user.id)
+            store.update_item(component, acting_user.id)
 
-        return {"success": True, "component_id": str(component.location)}
+        return {"success": True, "component_id": str(component.location), "parent_vertical": usage_key_str}
 
     except Exception as e:
         logger.exception(f"Error creating HTML content: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "vertical_id": vertical_id, "requested_by": str(user_identifier)}

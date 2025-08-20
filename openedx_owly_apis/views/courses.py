@@ -55,7 +55,8 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             course_number=data.get('course_number'),
             run=data.get('run'),
             display_name=data.get('display_name'),
-            start_date=data.get('start_date')
+            start_date=data.get('start_date'),
+            user_identifier=request.user.id
         )
         return Response(result)
 
@@ -74,7 +75,8 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         result = create_course_structure_logic(
             course_id=data.get('course_id'),
             units_config=data.get('units_config'),
-            edit=data.get('edit', False)
+            edit=data.get('edit', False),
+            user_identifier=request.user.id
         )
         return Response(result)
 
@@ -92,7 +94,8 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         data = request.data
         result = add_html_content_logic(
             vertical_id=data.get('vertical_id'),
-            html_config=data.get('html_config')
+            html_config=data.get('html_config'),
+            user_identifier=request.user.id
         )
         return Response(result)
 
@@ -110,7 +113,8 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         data = request.data
         result = add_video_content_logic(
             vertical_id=data.get('vertical_id'),
-            video_config=data.get('video_config')
+            video_config=data.get('video_config'),
+            user_identifier=request.user.id
         )
         return Response(result)
 
@@ -128,7 +132,8 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         data = request.data
         result = add_problem_content_logic(
             vertical_id=data.get('vertical_id'),
-            problem_config=data.get('problem_config')
+            problem_config=data.get('problem_config'),
+            user_identifier=request.user.id
         )
         return Response(result)
 
@@ -146,7 +151,8 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         data = request.data
         result = add_discussion_content_logic(
             vertical_id=data.get('vertical_id'),
-            discussion_config=data.get('discussion_config')
+            discussion_config=data.get('discussion_config'),
+            user_identifier=request.user.id
         )
         return Response(result)
 
