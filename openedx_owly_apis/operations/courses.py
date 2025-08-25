@@ -694,3 +694,136 @@ def add_html_content_logic(vertical_id: str, html_config: dict, user_identifier=
     except Exception as e:
         logger.exception(f"Error creating HTML content: {e}")
         return {"success": False, "error": str(e), "vertical_id": vertical_id, "requested_by": str(user_identifier)}
+
+
+def update_course_settings_logic(course_id: str, settings_data: dict, user_identifier=None) -> dict:
+    """Update course settings including dates, details, and other configurations"""
+    
+    from opaque_keys.edx.keys import CourseKey
+    from django.contrib.auth import get_user_model
+    from xmodule.modulestore.django import modulestore
+    from datetime import datetime
+    
+    try:
+        logger.info(
+            "update_course_settings start course_id=%s requested_by=%s settings_keys=%s",
+            course_id, str(user_identifier), list((settings_data or {}).keys())
+        )
+        
+        User = get_user_model()
+        acting_user = _get_acting_user(user_identifier)
+        
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+        
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False, 
+                "error": "invalid_course_id", 
+                "message": f"Invalid course_id format: {course_id}"
+            }
+        
+        # Get course from modulestore
+        store = modulestore()
+        course = store.get_course(course_key)
+        
+        if not course:
+            return {
+                "success": False, 
+                "error": "course_not_found", 
+                "message": f"Course not found: {course_id}"
+            }
+        
+        # Track updated fields
+        updated_fields = []
+        
+        # Helper function to parse ISO datetime strings
+        def parse_datetime(date_str):
+            if not date_str:
+                return None
+            try:
+                # Handle ISO format with Z or timezone
+                if date_str.endswith('Z'):
+                    date_str = date_str[:-1] + '+00:00'
+                return datetime.fromisoformat(date_str)
+            except ValueError as e:
+                logger.warning(f"Invalid datetime format: {date_str}, error: {e}")
+                return None
+        
+        # Update course fields based on settings_data
+        if 'start_date' in settings_data:
+            start_date = parse_datetime(settings_data['start_date'])
+            if start_date:
+                course.start = start_date
+                updated_fields.append('start_date')
+        
+        if 'end_date' in settings_data:
+            end_date = parse_datetime(settings_data['end_date'])
+            if end_date:
+                course.end = end_date
+                updated_fields.append('end_date')
+        
+        if 'enrollment_start' in settings_data:
+            enrollment_start = parse_datetime(settings_data['enrollment_start'])
+            if enrollment_start:
+                course.enrollment_start = enrollment_start
+                updated_fields.append('enrollment_start')
+        
+        if 'enrollment_end' in settings_data:
+            enrollment_end = parse_datetime(settings_data['enrollment_end'])
+            if enrollment_end:
+                course.enrollment_end = enrollment_end
+                updated_fields.append('enrollment_end')
+        
+        if 'display_name' in settings_data and settings_data['display_name']:
+            course.display_name = settings_data['display_name']
+            updated_fields.append('display_name')
+        
+        if 'language' in settings_data and settings_data['language']:
+            course.language = settings_data['language']
+            updated_fields.append('language')
+        
+        if 'self_paced' in settings_data:
+            course.self_paced = bool(settings_data['self_paced'])
+            updated_fields.append('self_paced')
+        
+        if 'short_description' in settings_data:
+            course.short_description = settings_data['short_description']
+            updated_fields.append('short_description')
+        
+        if 'overview' in settings_data:
+            course.overview = settings_data['overview']
+            updated_fields.append('overview')
+        
+        if 'effort' in settings_data:
+            course.effort = settings_data['effort']
+            updated_fields.append('effort')
+        
+        if 'course_image_name' in settings_data:
+            course.course_image = settings_data['course_image_name']
+            updated_fields.append('course_image_name')
+        
+        # Save changes to modulestore
+        if updated_fields:
+            store.update_item(course, acting_user.id)
+            logger.info(f"Successfully updated course {course_id} fields: {updated_fields}")
+        
+        return {
+            "success": True,
+            "course_id": course_id,
+            "updated_fields": updated_fields,
+            "message": f"Successfully updated {len(updated_fields)} field(s)" if updated_fields else "No fields to update"
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error updating course settings: {e}")
+        return {
+            "success": False,
+            "error": "update_failed",
+            "message": str(e),
+            "course_id": course_id,
+            "requested_by": str(user_identifier)
+        }

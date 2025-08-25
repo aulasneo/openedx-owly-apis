@@ -23,7 +23,8 @@ from openedx_owly_apis.operations.courses import (
     add_html_content_logic,
     add_video_content_logic,
     add_problem_content_logic,
-    add_discussion_content_logic
+    add_discussion_content_logic,
+    update_course_settings_logic
 )
 
 class OpenedXCourseViewSet(viewsets.ViewSet):
@@ -152,6 +153,25 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         result = add_discussion_content_logic(
             vertical_id=data.get('vertical_id'),
             discussion_config=data.get('discussion_config'),
+            user_identifier=request.user.id
+        )
+        return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='settings/update',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
+    )
+    def update_settings(self, request):
+        """
+        Actualizar configuraciones del curso (fechas, detalles, etc.)
+        Mapea directamente a update_course_settings_logic()
+        """
+        data = request.data
+        result = update_course_settings_logic(
+            course_id=data.get('course_id'),
+            settings_data=data.get('settings_data', {}),
             user_identifier=request.user.id
         )
         return Response(result)
