@@ -13,6 +13,7 @@ from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthenticat
 from openedx.core.lib.api.authentication import BearerAuthenticationAllowInactiveUser
 from openedx_owly_apis.permissions import (
     IsAdminOrCourseCreator,
+    IsAdminOrCourseStaff,
     IsAdminOrCourseCreatorOrCourseStaff,
 )
 
@@ -161,7 +162,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         detail=False,
         methods=['post'],
         url_path='settings/update',
-        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
     )
     def update_settings(self, request):
         """
