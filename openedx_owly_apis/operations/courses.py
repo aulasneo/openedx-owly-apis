@@ -740,43 +740,75 @@ def update_course_settings_logic(course_id: str, settings_data: dict, user_ident
         # Track updated fields
         updated_fields = []
         
-        # Helper function to parse ISO datetime strings
-        def parse_datetime(date_str):
+        # Helper function to parse ISO datetime strings with detailed logging
+        def parse_datetime(date_str, field_name):
+            logger.info(f"Attempting to parse {field_name}: '{date_str}' (type: {type(date_str)})")
+            
             if not date_str:
+                logger.info(f"{field_name}: Empty or None value, skipping")
                 return None
+            
             try:
                 # Handle ISO format with Z or timezone
-                if date_str.endswith('Z'):
-                    date_str = date_str[:-1] + '+00:00'
-                return datetime.fromisoformat(date_str)
+                original_str = str(date_str)
+                if original_str.endswith('Z'):
+                    date_str = original_str[:-1] + '+00:00'
+                    logger.info(f"{field_name}: Converted Z format: '{original_str}' -> '{date_str}'")
+                
+                parsed_date = datetime.fromisoformat(date_str)
+                logger.info(f"{field_name}: Successfully parsed to {parsed_date}")
+                return parsed_date
+                
             except ValueError as e:
-                logger.warning(f"Invalid datetime format: {date_str}, error: {e}")
+                logger.error(f"{field_name}: Failed to parse datetime '{date_str}', error: {e}")
+                return None
+            except Exception as e:
+                logger.error(f"{field_name}: Unexpected error parsing datetime '{date_str}', error: {e}")
                 return None
         
-        # Update course fields based on settings_data
+        # Log all incoming settings data for debugging
+        logger.info(f"Received settings_data: {settings_data}")
+        
+        # Update course fields based on settings_data with detailed logging
         if 'start_date' in settings_data:
-            start_date = parse_datetime(settings_data['start_date'])
+            logger.info(f"Processing start_date field...")
+            start_date = parse_datetime(settings_data['start_date'], 'start_date')
             if start_date:
+                logger.info(f"Setting course.start = {start_date}")
                 course.start = start_date
                 updated_fields.append('start_date')
+            else:
+                logger.warning(f"start_date parsing failed, not updating field")
         
         if 'end_date' in settings_data:
-            end_date = parse_datetime(settings_data['end_date'])
+            logger.info(f"Processing end_date field...")
+            end_date = parse_datetime(settings_data['end_date'], 'end_date')
             if end_date:
+                logger.info(f"Setting course.end = {end_date}")
                 course.end = end_date
                 updated_fields.append('end_date')
+            else:
+                logger.warning(f"end_date parsing failed, not updating field")
         
         if 'enrollment_start' in settings_data:
-            enrollment_start = parse_datetime(settings_data['enrollment_start'])
+            logger.info(f"Processing enrollment_start field...")
+            enrollment_start = parse_datetime(settings_data['enrollment_start'], 'enrollment_start')
             if enrollment_start:
+                logger.info(f"Setting course.enrollment_start = {enrollment_start}")
                 course.enrollment_start = enrollment_start
                 updated_fields.append('enrollment_start')
+            else:
+                logger.warning(f"enrollment_start parsing failed, not updating field")
         
         if 'enrollment_end' in settings_data:
-            enrollment_end = parse_datetime(settings_data['enrollment_end'])
+            logger.info(f"Processing enrollment_end field...")
+            enrollment_end = parse_datetime(settings_data['enrollment_end'], 'enrollment_end')
             if enrollment_end:
+                logger.info(f"Setting course.enrollment_end = {enrollment_end}")
                 course.enrollment_end = enrollment_end
                 updated_fields.append('enrollment_end')
+            else:
+                logger.warning(f"enrollment_end parsing failed, not updating field")
         
         if 'display_name' in settings_data and settings_data['display_name']:
             course.display_name = settings_data['display_name']
@@ -825,5 +857,413 @@ def update_course_settings_logic(course_id: str, settings_data: dict, user_ident
             "error": "update_failed",
             "message": str(e),
             "course_id": course_id,
+            "requested_by": str(user_identifier)
+        }
+
+
+def update_advanced_settings_logic(course_id: str, advanced_settings: dict, user_identifier=None) -> dict:
+    """Update course advanced settings (other_course_settings)"""
+    
+    from opaque_keys.edx.keys import CourseKey
+    from django.contrib.auth import get_user_model
+    from xmodule.modulestore.django import modulestore
+    
+    try:
+        logger.info(
+            "update_advanced_settings start course_id=%s requested_by=%s settings_keys=%s",
+            course_id, str(user_identifier), list((advanced_settings or {}).keys())
+        )
+        
+        User = get_user_model()
+        acting_user = _get_acting_user(user_identifier)
+        
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+        
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False, 
+                "error": "invalid_course_id", 
+                "message": f"Invalid course_id format: {course_id}"
+            }
+        
+        # Get course from modulestore
+        store = modulestore()
+        course = store.get_course(course_key)
+        
+        if not course:
+            return {
+                "success": False, 
+                "error": "course_not_found", 
+                "message": f"Course not found: {course_id}"
+            }
+        
+        # Validate and update advanced settings
+        updated_settings = []
+        
+        if not advanced_settings:
+            return {
+                "success": False,
+                "error": "no_settings_provided",
+                "message": "No advanced settings provided to update"
+            }
+        
+        # Get current other_course_settings or initialize as empty dict
+        current_settings = getattr(course, 'other_course_settings', {}) or {}
+        
+        # Update each advanced setting
+        for setting_key, setting_value in advanced_settings.items():
+            try:
+                # Validate setting key format
+                if not isinstance(setting_key, str) or not setting_key.strip():
+                    logger.warning(f"Invalid setting key: {setting_key}")
+                    continue
+                
+                # Handle different value types
+                if setting_value is None:
+                    # Remove setting if value is None
+                    if setting_key in current_settings:
+                        del current_settings[setting_key]
+                        updated_settings.append(f"removed_{setting_key}")
+                else:
+                    # Update or add setting
+                    current_settings[setting_key] = setting_value
+                    updated_settings.append(setting_key)
+                
+                logger.info(f"Updated advanced setting: {setting_key} = {setting_value}")
+                
+            except Exception as setting_error:
+                logger.warning(f"Error updating setting {setting_key}: {setting_error}")
+                continue
+        
+        # Save updated settings back to course
+        if updated_settings:
+            course.other_course_settings = current_settings
+            store.update_item(course, acting_user.id)
+            logger.info(f"Successfully updated course {course_id} advanced settings: {updated_settings}")
+        
+        return {
+            "success": True,
+            "course_id": course_id,
+            "updated_settings": updated_settings,
+            "current_settings": current_settings,
+            "message": f"Successfully updated {len(updated_settings)} advanced setting(s)" if updated_settings else "No settings to update"
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error updating advanced settings: {e}")
+        return {
+            "success": False,
+            "error": "update_failed", 
+            "message": str(e),
+            "course_id": course_id,
+            "requested_by": str(user_identifier)
+        }
+
+
+def enable_configure_certificates_logic(course_id: str, certificate_config: dict, user_identifier=None) -> dict:
+    """Enable and configure certificates for a course in OpenEdX"""
+    
+    from opaque_keys.edx.keys import CourseKey
+    from django.contrib.auth import get_user_model
+    from xmodule.modulestore.django import modulestore
+    
+    try:
+        logger.info(
+            "enable_configure_certificates start course_id=%s requested_by=%s config_keys=%s",
+            course_id, str(user_identifier), list((certificate_config or {}).keys())
+        )
+        
+        User = get_user_model()
+        acting_user = _get_acting_user(user_identifier)
+        
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+        
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False, 
+                "error": "invalid_course_id", 
+                "message": f"Invalid course_id format: {course_id}"
+            }
+        
+        # Get course from modulestore
+        store = modulestore()
+        course = store.get_course(course_key)
+        
+        if not course:
+            return {
+                "success": False, 
+                "error": "course_not_found", 
+                "message": f"Course not found: {course_id}"
+            }
+        
+        # Configure certificate settings
+        updated_settings = []
+        
+        if not certificate_config:
+            return {
+                "success": False,
+                "error": "no_config_provided",
+                "message": "No certificate configuration provided"
+            }
+        
+        # Enable certificates if requested
+        if certificate_config.get('enable_certificates', False):
+            course.certificates_display_behavior = 'end'
+            course.certificate_available_date = None
+            updated_settings.append('certificates_enabled')
+            logger.info(f"Enabled certificates for course {course_id}")
+        
+        # Configure certificate display behavior
+        if 'certificates_display_behavior' in certificate_config:
+            valid_behaviors = ['end', 'early_with_info', 'early_no_info']
+            behavior = certificate_config['certificates_display_behavior']
+            if behavior in valid_behaviors:
+                course.certificates_display_behavior = behavior
+                updated_settings.append('certificates_display_behavior')
+                logger.info(f"Set certificate display behavior to: {behavior}")
+            else:
+                logger.warning(f"Invalid certificate display behavior: {behavior}")
+        
+        # Configure certificate available date
+        if 'certificate_available_date' in certificate_config:
+            from datetime import datetime
+            date_str = certificate_config['certificate_available_date']
+            if date_str:
+                try:
+                    if date_str.endswith('Z'):
+                        date_str = date_str[:-1] + '+00:00'
+                    cert_date = datetime.fromisoformat(date_str)
+                    course.certificate_available_date = cert_date
+                    updated_settings.append('certificate_available_date')
+                    logger.info(f"Set certificate available date to: {cert_date}")
+                except ValueError as e:
+                    logger.warning(f"Invalid certificate date format: {date_str}, error: {e}")
+            else:
+                course.certificate_available_date = None
+                updated_settings.append('certificate_available_date_cleared')
+        
+        # Update advanced settings for certificate configuration
+        current_settings = getattr(course, 'other_course_settings', {}) or {}
+        
+        # Certificate name (long)
+        if 'certificate_name_long' in certificate_config:
+            current_settings['cert_name_long'] = certificate_config['certificate_name_long']
+            updated_settings.append('certificate_name_long')
+        
+        # Certificate name (short)
+        if 'certificate_name_short' in certificate_config:
+            current_settings['cert_name_short'] = certificate_config['certificate_name_short']
+            updated_settings.append('certificate_name_short')
+        
+        # Certificate web/html view overrides
+        if 'certificate_web_view_overrides' in certificate_config:
+            current_settings['cert_html_view_overrides'] = certificate_config['certificate_web_view_overrides']
+            updated_settings.append('certificate_web_view_overrides')
+        
+        # Update course with new settings
+        if updated_settings:
+            if current_settings != getattr(course, 'other_course_settings', {}):
+                course.other_course_settings = current_settings
+            store.update_item(course, acting_user.id)
+            logger.info(f"Successfully updated certificate settings for course {course_id}: {updated_settings}")
+        
+        # Try to create/configure certificate configuration if needed
+        certificate_status = "configured"
+        try:
+            from lms.djangoapps.certificates.models import CertificateGenerationConfiguration
+            
+            # Enable certificate generation globally if not already enabled
+            cert_config, created = CertificateGenerationConfiguration.objects.get_or_create(
+                defaults={'enabled': True}
+            )
+            if created or not cert_config.enabled:
+                cert_config.enabled = True
+                cert_config.save()
+                certificate_status = "enabled_globally"
+                logger.info("Enabled certificate generation globally")
+                
+        except Exception as cert_error:
+            logger.warning(f"Could not configure certificate generation: {cert_error}")
+            certificate_status = "configured_course_only"
+        
+        return {
+            "success": True,
+            "course_id": course_id,
+            "updated_settings": updated_settings,
+            "certificate_status": certificate_status,
+            "current_config": {
+                "certificates_display_behavior": getattr(course, 'certificates_display_behavior', None),
+                "certificate_available_date": getattr(course, 'certificate_available_date', None).isoformat() if getattr(course, 'certificate_available_date', None) else None,
+                "certificate_name_long": current_settings.get('cert_name_long'),
+                "certificate_name_short": current_settings.get('cert_name_short'),
+                "certificate_web_view_overrides": current_settings.get('cert_html_view_overrides')
+            },
+            "message": f"Successfully configured {len(updated_settings)} certificate setting(s)" if updated_settings else "No settings to update"
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error configuring certificates: {e}")
+        return {
+            "success": False,
+            "error": "configuration_failed", 
+            "message": str(e),
+            "course_id": course_id,
+            "requested_by": str(user_identifier)
+        }
+
+
+def control_unit_availability_logic(unit_id: str, availability_config: dict, user_identifier=None) -> dict:
+    """Control unit availability and due dates in OpenEdX"""
+    
+    from opaque_keys.edx.keys import UsageKey
+    from django.contrib.auth import get_user_model
+    from xmodule.modulestore.django import modulestore
+    from datetime import datetime
+    
+    try:
+        logger.info(
+            "control_unit_availability start unit_id=%s requested_by=%s config_keys=%s",
+            unit_id, str(user_identifier), list((availability_config or {}).keys())
+        )
+        
+        User = get_user_model()
+        acting_user = _get_acting_user(user_identifier)
+        
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+        
+        # Parse unit key
+        try:
+            unit_key = UsageKey.from_string(unit_id)
+        except Exception as e:
+            return {
+                "success": False, 
+                "error": "invalid_unit_id", 
+                "message": f"Invalid unit_id format: {unit_id}"
+            }
+        
+        # Get unit from modulestore
+        store = modulestore()
+        unit = store.get_item(unit_key)
+        
+        if not unit:
+            return {
+                "success": False, 
+                "error": "unit_not_found", 
+                "message": f"Unit not found: {unit_id}"
+            }
+        
+        # Validate unit type (should be vertical, sequential, or chapter)
+        valid_categories = ['vertical', 'sequential', 'chapter']
+        if getattr(unit, 'category', None) not in valid_categories:
+            return {
+                "success": False,
+                "error": "invalid_unit_type",
+                "message": f"Unit category '{getattr(unit, 'category', None)}' is not supported. Must be one of: {valid_categories}"
+            }
+        
+        # Configure availability settings
+        updated_settings = []
+        
+        if not availability_config:
+            return {
+                "success": False,
+                "error": "no_config_provided",
+                "message": "No availability configuration provided"
+            }
+        
+        # Helper function to parse datetime
+        def parse_datetime(date_str):
+            if not date_str:
+                return None
+            try:
+                if date_str.endswith('Z'):
+                    date_str = date_str[:-1] + '+00:00'
+                return datetime.fromisoformat(date_str)
+            except ValueError as e:
+                logger.warning(f"Invalid datetime format: {date_str}, error: {e}")
+                return None
+        
+        # Set start date (when unit becomes available)
+        if 'start_date' in availability_config:
+            start_date = parse_datetime(availability_config['start_date'])
+            if start_date or availability_config['start_date'] is None:
+                unit.start = start_date
+                updated_settings.append('start_date')
+                logger.info(f"Set start date to: {start_date}")
+        
+        # Set due date (when unit is due)
+        if 'due_date' in availability_config:
+            due_date = parse_datetime(availability_config['due_date'])
+            if due_date or availability_config['due_date'] is None:
+                unit.due = due_date
+                updated_settings.append('due_date')
+                logger.info(f"Set due date to: {due_date}")
+        
+        # Set visibility to staff only
+        if 'visible_to_staff_only' in availability_config:
+            visible_to_staff = bool(availability_config['visible_to_staff_only'])
+            unit.visible_to_staff_only = visible_to_staff
+            updated_settings.append('visible_to_staff_only')
+            logger.info(f"Set visible to staff only: {visible_to_staff}")
+        
+        # Set graded status (for sequentials)
+        if 'graded' in availability_config and getattr(unit, 'category', None) == 'sequential':
+            graded = bool(availability_config['graded'])
+            unit.graded = graded
+            updated_settings.append('graded')
+            logger.info(f"Set graded status: {graded}")
+        
+        # Set format (for sequentials - homework, exam, etc.)
+        if 'format' in availability_config and getattr(unit, 'category', None) == 'sequential':
+            format_type = availability_config['format']
+            if format_type:
+                unit.format = format_type
+                updated_settings.append('format')
+                logger.info(f"Set format: {format_type}")
+        
+        # Set hide after due (for sequentials)
+        if 'hide_after_due' in availability_config and getattr(unit, 'category', None) == 'sequential':
+            hide_after_due = bool(availability_config['hide_after_due'])
+            unit.hide_after_due = hide_after_due
+            updated_settings.append('hide_after_due')
+            logger.info(f"Set hide after due: {hide_after_due}")
+        
+        # Update unit with new settings
+        if updated_settings:
+            store.update_item(unit, acting_user.id)
+            logger.info(f"Successfully updated availability settings for unit {unit_id}: {updated_settings}")
+        
+        return {
+            "success": True,
+            "unit_id": unit_id,
+            "unit_type": getattr(unit, 'category', None),
+            "updated_settings": updated_settings,
+            "current_config": {
+                "start_date": getattr(unit, 'start', None).isoformat() if getattr(unit, 'start', None) else None,
+                "due_date": getattr(unit, 'due', None).isoformat() if getattr(unit, 'due', None) else None,
+                "visible_to_staff_only": getattr(unit, 'visible_to_staff_only', False),
+                "graded": getattr(unit, 'graded', False) if getattr(unit, 'category', None) == 'sequential' else None,
+                "format": getattr(unit, 'format', None) if getattr(unit, 'category', None) == 'sequential' else None,
+                "hide_after_due": getattr(unit, 'hide_after_due', False) if getattr(unit, 'category', None) == 'sequential' else None
+            },
+            "message": f"Successfully updated {len(updated_settings)} availability setting(s)" if updated_settings else "No settings to update"
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error controlling unit availability: {e}")
+        return {
+            "success": False,
+            "error": "control_failed", 
+            "message": str(e),
+            "unit_id": unit_id,
             "requested_by": str(user_identifier)
         }

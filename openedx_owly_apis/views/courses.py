@@ -19,13 +19,16 @@ from openedx_owly_apis.permissions import (
 
 # Importar funciones lógicas originales
 from openedx_owly_apis.operations.courses import (
+    update_course_settings_logic,
     create_course_logic,
-    create_course_structure_logic,
+    update_advanced_settings_logic,
+    enable_configure_certificates_logic,
+    control_unit_availability_logic,
     add_html_content_logic,
     add_video_content_logic,
     add_problem_content_logic,
     add_discussion_content_logic,
-    update_course_settings_logic
+    create_course_structure_logic,
 )
 
 class OpenedXCourseViewSet(viewsets.ViewSet):
@@ -177,3 +180,53 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         )
         return Response(result)
 
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='settings/advanced',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def update_advanced_settings(self, request):
+        """
+        Actualizar configuraciones avanzadas del curso (other_course_settings)
+        Mapea directamente a update_advanced_settings_logic()
+        """
+        data = request.data
+        result = update_advanced_settings_logic(
+            course_id=data.get('course_id'),
+            advanced_settings=data.get('advanced_settings', {}),
+            user_identifier=request.user.id
+        )
+        return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='certificates/configure',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def configure_certificates(self, request):
+        """Configure certificates for a course"""
+        data = request.data
+        result = enable_configure_certificates_logic(
+            course_id=data.get('course_id'),
+            certificate_config=data.get('certificate_config', {}),
+            user_identifier=request.user.id
+        )
+        return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='units/availability/control',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def control_unit_availability(self, request):
+        """Control unit availability and due dates"""
+        data = request.data
+        result = control_unit_availability_logic(
+            unit_id=data.get('unit_id'),
+            availability_config=data.get('availability_config', {}),
+            user_identifier=request.user.id
+        )
+        return Response(result)
