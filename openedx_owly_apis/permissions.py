@@ -8,15 +8,10 @@ Se intenta resolver el contexto (curso/org) desde query params o body.
 """
 from typing import Optional
 
-from rest_framework.permissions import BasePermission
-
+from common.djangoapps.student.auth import CourseCreatorRole, OrgContentCreatorRole, user_has_role
+from common.djangoapps.student.roles import CourseInstructorRole, CourseLimitedStaffRole, CourseStaffRole
 from opaque_keys.edx.keys import CourseKey, UsageKey
-from common.djangoapps.student.roles import (
-    CourseStaffRole,
-    CourseInstructorRole,
-    CourseLimitedStaffRole,
-)
-from common.djangoapps.student.auth import user_has_role, CourseCreatorRole, OrgContentCreatorRole
+from rest_framework.permissions import BasePermission
 
 
 def _get_course_key_from_request(request) -> Optional[CourseKey]:
@@ -60,7 +55,8 @@ def _get_org_from_request(request, fallback_course_key: Optional[CourseKey]) -> 
 class IsCourseCreator(BasePermission):
     message = "User must be a Course Creator"
 
-    def has_permission(self, request, view) -> bool:  # noqa: D401
+    def has_permission(self, request, _view) -> bool:  # noqa: D401
+        """Return True if the user is a Course Creator (global or by org)."""
         user = request.user
         if not getattr(user, "is_authenticated", False):
             return False
@@ -80,7 +76,8 @@ class IsCourseCreator(BasePermission):
 class IsCourseStaff(BasePermission):
     message = "User must be Course Staff for the specified course"
 
-    def has_permission(self, request, view) -> bool:  # noqa: D401
+    def has_permission(self, request, _view) -> bool:  # noqa: D401
+        """Return True if the user is staff/instructor/limited staff for the course."""
         user = request.user
         if not getattr(user, "is_authenticated", False):
             return False
@@ -102,7 +99,8 @@ class IsAdminOrCourseCreator(BasePermission):
 
     message = "User must be admin or Course Creator"
 
-    def has_permission(self, request, view) -> bool:
+    def has_permission(self, request, _view) -> bool:
+        """Allow if site admin or Course Creator."""
         user = request.user
         if not getattr(user, "is_authenticated", False):
             return False
@@ -111,7 +109,7 @@ class IsAdminOrCourseCreator(BasePermission):
         if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
             return True
 
-        return IsCourseCreator().has_permission(request, view)
+        return IsCourseCreator().has_permission(request, _view)
 
 
 class IsAdminOrCourseStaff(BasePermission):
@@ -119,7 +117,8 @@ class IsAdminOrCourseStaff(BasePermission):
 
     message = "User must be admin or Course Staff"
 
-    def has_permission(self, request, view) -> bool:
+    def has_permission(self, request, _view) -> bool:
+        """Allow if site admin or Course Staff for the specified course."""
         user = request.user
         if not getattr(user, "is_authenticated", False):
             return False
@@ -128,7 +127,7 @@ class IsAdminOrCourseStaff(BasePermission):
         if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
             return True
 
-        return IsCourseStaff().has_permission(request, view)
+        return IsCourseStaff().has_permission(request, _view)
 
 
 class IsAdminOrCourseCreatorOrCourseStaff(BasePermission):
@@ -136,7 +135,8 @@ class IsAdminOrCourseCreatorOrCourseStaff(BasePermission):
 
     message = "User must be admin, Course Creator or Course Staff"
 
-    def has_permission(self, request, view) -> bool:
+    def has_permission(self, request, _view) -> bool:
+        """Allow if admin or has Course Creator/Staff role for the context."""
         user = request.user
         if not getattr(user, "is_authenticated", False):
             return False
@@ -147,7 +147,6 @@ class IsAdminOrCourseCreatorOrCourseStaff(BasePermission):
 
         # OR entre creador de curso y staff del curso
         return (
-            IsCourseCreator().has_permission(request, view)
-            or IsCourseStaff().has_permission(request, view)
+            IsCourseCreator().has_permission(request, _view)
+            or IsCourseStaff().has_permission(request, _view)
         )
-

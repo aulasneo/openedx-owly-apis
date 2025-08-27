@@ -5,25 +5,15 @@ import json
 import logging
 from datetime import datetime, timedelta
 
+from common.djangoapps.course_modes.models import CourseMode
+from common.djangoapps.student.models import CourseEnrollment, CourseEnrollmentAttribute
+from django.contrib.auth import get_user_model
 from django.db.models import Count
 from django.utils import timezone
-from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
 from opaque_keys.edx.keys import CourseKey
-from openedx.core.djangoapps.discussions.models import DiscussionsConfiguration
-from openedx.core.djangoapps.discussions.models import DiscussionsConfiguration
-
+from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
+from openedx.core.djangoapps.discussions.models import DiscussionsConfiguration, DiscussionTopicLink
 from openedx.core.djangoapps.enrollments.data import get_course_enrollment_info
-from openedx.core.djangoapps.discussions.models import (
-    DiscussionsConfiguration,
-    DiscussionTopicLink
-)
-
-from common.djangoapps.student.models import CourseEnrollmentAttribute
-from common.djangoapps.course_modes.models import CourseMode
-from common.djangoapps.student.models import CourseEnrollment
-
-from django.contrib.auth import get_user_model
-
 from xmodule.modulestore import ModuleStoreEnum
 from xmodule.modulestore.exceptions import DuplicateCourseError
 

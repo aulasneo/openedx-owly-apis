@@ -1,6 +1,12 @@
+"""
+Test stubs and fixtures for isolating Open edX dependencies.
+
+This module provides lightweight stub modules so app code can import without the
+full Open edX platform during tests.
+"""
+
 import sys
 import types
-from types import SimpleNamespace
 
 import pytest
 
@@ -8,8 +14,7 @@ import pytest
 def _ensure_module(path: str):
     parts = path.split(".")
     base = ""
-    for i in range(len(parts)):
-        name = parts[i]
+    for _, name in enumerate(parts):  # pylint: disable=unused-variable
         base = f"{base}.{name}" if base else name
         if base not in sys.modules:
             sys.modules[base] = types.ModuleType(base)
@@ -17,8 +22,9 @@ def _ensure_module(path: str):
 
 
 @pytest.fixture(autouse=True)
-def stub_openedx_modules():
-    """Stub external Open edX and DRF auth modules so views can import.
+def stub_openedx_modules():  # pylint: disable=too-many-statements
+    """
+    Stub external Open edX and DRF auth modules so views can import.
 
     This avoids installing the full Open edX platform during tests.
     """
@@ -26,6 +32,7 @@ def stub_openedx_modules():
 
     # edx-rest-framework-extensions auth
     mod = _ensure_module("edx_rest_framework_extensions.auth.jwt.authentication")
+
     class JwtAuthentication:
         def authenticate(self, request):  # pragma: no cover - not used in these tests
             return None
@@ -34,6 +41,7 @@ def stub_openedx_modules():
 
     # openedx.core Bearer auth
     mod = _ensure_module("openedx.core.lib.api.authentication")
+
     class BearerAuthentication:
         def authenticate(self, request):  # pragma: no cover - not used in these tests
             return None
@@ -42,6 +50,7 @@ def stub_openedx_modules():
 
     # opaque keys minimal stub
     mod = _ensure_module("opaque_keys.edx.keys")
+
     class _CourseKey:
         def __init__(self, raw):
             self._raw = raw
@@ -50,13 +59,16 @@ def stub_openedx_modules():
             if raw and ":" in raw:
                 try:
                     self.org = raw.split(":", 1)[1].split("+")[0]
-                except Exception:  # pragma: no cover - best effort
+                except Exception:  # pragma: no cover - best effort  # pylint: disable=broad-exception-caught
                     self.org = None
+
         @classmethod
         def from_string(cls, s):
             return cls(s)
+
         def __str__(self):
             return self._raw
+
     class _UsageKey(_CourseKey):
         pass
     mod.CourseKey = _CourseKey
@@ -65,10 +77,12 @@ def stub_openedx_modules():
 
     # common.djangoapps student roles/auth minimal
     mod = _ensure_module("common.djangoapps.student.roles")
+
     class _Role:
         def __init__(self, *args, **kwargs):
             self.args = args
             self.kwargs = kwargs
+
         def has_user(self, user):
             return getattr(user, "is_course_staff", False)
     mod.CourseInstructorRole = _Role
@@ -77,12 +91,15 @@ def stub_openedx_modules():
     stubs.append("common.djangoapps.student.roles")
 
     mod = _ensure_module("common.djangoapps.student.auth")
+
     class CourseCreatorRole:  # noqa: D401 - dummy
         pass
+
     class OrgContentCreatorRole:
         def __init__(self, org=None):
             self.org = org
-    def user_has_role(user, role):
+
+    def user_has_role(user, _role):
         return getattr(user, "is_course_creator", False)
     mod.CourseCreatorRole = CourseCreatorRole
     mod.OrgContentCreatorRole = OrgContentCreatorRole
@@ -91,8 +108,9 @@ def stub_openedx_modules():
 
     # Replace openedx_owly_apis.permissions with permissive dummies to avoid importing real module
     perm_mod = types.ModuleType("openedx_owly_apis.permissions")
+
     class _AllowAll:  # mimics DRF BasePermission
-        def has_permission(self, request, view):
+        def has_permission(self, request, _view):
             return True
     perm_mod.IsAdminOrCourseCreator = _AllowAll
     perm_mod.IsAdminOrCourseStaff = _AllowAll
@@ -102,6 +120,7 @@ def stub_openedx_modules():
 
     # Stub operations modules with simple functions so views import succeeds
     ops_courses = types.ModuleType("openedx_owly_apis.operations.courses")
+
     def _simple_ret(name):
         def _fn(**kwargs):
             return {"called": name, "kwargs": kwargs}
@@ -120,12 +139,14 @@ def stub_openedx_modules():
     stubs.append("openedx_owly_apis.operations.courses")
 
     ops_analytics = types.ModuleType("openedx_owly_apis.operations.analytics")
+
     def _normalize_args(args, kwargs):
         # Views pass course_id positionally; map it into kwargs for easier assertions
         if args and "course_id" not in kwargs:
             kwargs = dict(kwargs)
             kwargs["course_id"] = args[0]
         return kwargs
+
     def _mk_analytics(name):
         def _fn(*args, **kwargs):
             return {"called": name, "kwargs": _normalize_args(args, kwargs)}
@@ -141,6 +162,6 @@ def stub_openedx_modules():
         yield
     finally:
         # Optionally cleanup stubs if needed
-        for key in stubs:
+        for _ in stubs:
             # Keep stubs for duration of test session; do not delete to avoid re-import churn
             pass

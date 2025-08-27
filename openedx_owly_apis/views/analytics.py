@@ -1,16 +1,16 @@
-from rest_framework import viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.authentication import SessionAuthentication
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
 from openedx.core.lib.api.authentication import BearerAuthentication
+from rest_framework import viewsets
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 # Importar funciones lógicas de analytics
 from openedx_owly_apis.operations.analytics import (
-    get_overview_analytics_logic,
-    get_enrollments_analytics_logic,
+    get_detailed_analytics_logic,
     get_discussions_analytics_logic,
-    get_detailed_analytics_logic
+    get_enrollments_analytics_logic,
+    get_overview_analytics_logic,
 )
 from openedx_owly_apis.permissions import IsAdminOrCourseStaff
 

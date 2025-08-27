@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import pytest
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+# pylint: disable=import-outside-toplevel, redefined-outer-name
+
 
 @pytest.fixture()
 def api_factory():
@@ -10,16 +12,16 @@ def api_factory():
 
 
 def _auth_user(**attrs):
-    base = dict(
-        id=1,
-        username="tester",
-        is_authenticated=True,
-        is_active=True,
-        is_superuser=False,
-        is_staff=False,
-        is_course_staff=False,
-        is_course_creator=False,
-    )
+    base = {
+        "id": 1,
+        "username": "tester",
+        "is_authenticated": True,
+        "is_active": True,
+        "is_superuser": False,
+        "is_staff": False,
+        "is_course_staff": False,
+        "is_course_creator": False,
+    }
     base.update(attrs)
     return SimpleNamespace(**base)
 
@@ -56,7 +58,8 @@ class TestOpenedXCourseViewSet:
             {"course_id": "course-v1:ORG+NUM+RUN", "settings_data": {"start": "2024-01-01"}},
             format="json",
         )
-        req.user = _auth_user()
+        user = _auth_user()
+        force_authenticate(req, user=user)
         resp = view(req)
         assert resp.status_code == 200
         assert resp.data["called"] == "update_course_settings_logic"
