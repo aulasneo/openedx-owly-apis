@@ -69,9 +69,10 @@ class OpenedXRolesViewSet(viewsets.ViewSet):
     def me(self, request):
         """
         Devuelve el rol efectivo del usuario autenticado.
+
         Query params opcionales:
-          - course_id: para evaluar si es staff del curso
-          - org: para evaluar course creator a nivel organización
+        - course_id: para evaluar si es staff del curso
+        - org: para evaluar course creator a nivel organización
         """
         user = request.user
         course_id = request.query_params.get("course_id")

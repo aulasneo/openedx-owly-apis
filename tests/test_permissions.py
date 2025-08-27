@@ -7,9 +7,9 @@ platform installed. We do this inline (pre-import) instead of relying on the
 session-wide autouse stubs, to keep this test self-contained.
 """
 
-from types import SimpleNamespace
 import sys
 import types
+from types import SimpleNamespace
 
 import pytest
 
@@ -27,6 +27,7 @@ def _ensure_module(path: str):
 # Minimal stubs needed by openedx_owly_apis.permissions
 mod = _ensure_module("opaque_keys.edx.keys")
 
+
 class _CourseKey:
     def __init__(self, raw):
         self._raw = raw
@@ -34,7 +35,7 @@ class _CourseKey:
         if raw and ":" in raw:
             try:
                 self.org = raw.split(":", 1)[1].split("+")[0]
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 self.org = None
 
     @classmethod
@@ -54,6 +55,7 @@ mod.UsageKey = _UsageKey
 
 mod = _ensure_module("common.djangoapps.student.roles")
 
+
 class _Role:
     def __init__(self, *args, **kwargs):
         self.args = args
@@ -68,6 +70,7 @@ mod.CourseStaffRole = _Role
 mod.CourseLimitedStaffRole = _Role
 
 mod = _ensure_module("common.djangoapps.student.auth")
+
 
 class CourseCreatorRole:  # noqa: D401 - dummy
     pass

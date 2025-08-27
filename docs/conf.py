@@ -69,6 +69,26 @@ extensions = [
     'sphinx.ext.napoleon'
 ]
 
+# Mock external modules that are only available in the Open edX platform runtime.
+# This prevents import errors during autodoc while keeping type/attr resolution minimal.
+autodoc_mock_imports = [
+    'common',
+    'common.djangoapps',
+    'common.djangoapps.student',
+    'common.djangoapps.student.auth',
+    'common.djangoapps.student.roles',
+    'opaque_keys',
+    'opaque_keys.edx',
+    'opaque_keys.edx.keys',
+    'openedx',
+    'openedx.core',
+    'openedx.core.lib',
+    'openedx.core.lib.api',
+    'openedx.core.lib.api.authentication',
+    'xmodule',
+    'xmodule.modulestore',
+]
+
 # A list of warning types to suppress arbitrary warning messages.
 suppress_warnings = [
     'image.nonlocal_uri',
