@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
-from openedx.core.lib.api.authentication import BearerAuthenticationAllowInactiveUser
+from openedx.core.lib.api.authentication import BearerAuthentication
 
 from typing import Optional
 
@@ -36,7 +36,7 @@ class OpenedXRolesViewSet(viewsets.ViewSet):
     """
     authentication_classes = (
         JwtAuthentication,
-        BearerAuthenticationAllowInactiveUser,
+        BearerAuthentication,
         SessionAuthentication,
     )
     permission_classes = [IsAuthenticated]

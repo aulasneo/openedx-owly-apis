@@ -7,10 +7,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
-from openedx.core.lib.api.authentication import BearerAuthenticationAllowInactiveUser
+from openedx.core.lib.api.authentication import BearerAuthentication
 from openedx_owly_apis.permissions import (
     IsAdminOrCourseCreator,
     IsAdminOrCourseStaff,
@@ -38,7 +36,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     """
     authentication_classes = (
         JwtAuthentication,
-        BearerAuthenticationAllowInactiveUser,
+        BearerAuthentication,
         SessionAuthentication,
     )
     permission_classes = [IsAuthenticated]

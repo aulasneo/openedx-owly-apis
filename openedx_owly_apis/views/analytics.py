@@ -2,9 +2,8 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.permissions import IsAuthenticated
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
-from openedx.core.lib.api.authentication import BearerAuthenticationAllowInactiveUser
+from openedx.core.lib.api.authentication import BearerAuthentication
 
 # Importar funciones lógicas de analytics
 from openedx_owly_apis.operations.analytics import (
@@ -13,6 +12,7 @@ from openedx_owly_apis.operations.analytics import (
     get_discussions_analytics_logic,
     get_detailed_analytics_logic
 )
+from openedx_owly_apis.permissions import IsAdminOrCourseStaff
 
 
 class OpenedXAnalyticsViewSet(viewsets.ViewSet):
@@ -22,10 +22,10 @@ class OpenedXAnalyticsViewSet(viewsets.ViewSet):
     """
     authentication_classes = (
         JwtAuthentication,
-        BearerAuthenticationAllowInactiveUser,
+        BearerAuthentication,
         SessionAuthentication,
     )
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrCourseStaff]
 
     @action(detail=False, methods=['get'], url_path='overview')
     def analytics_overview(self, request):
