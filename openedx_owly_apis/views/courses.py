@@ -2,32 +2,33 @@
 OpenedX Course Management ViewSet
 ViewSet simple que mapea directamente las funciones de lógica existentes
 """
-from rest_framework import viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.permissions import IsAuthenticated
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
 from openedx.core.lib.api.authentication import BearerAuthentication
-from openedx_owly_apis.permissions import (
-    IsAdminOrCourseCreator,
-    IsAdminOrCourseStaff,
-    IsAdminOrCourseCreatorOrCourseStaff,
-)
+from rest_framework import viewsets
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 # Importar funciones lógicas originales
 from openedx_owly_apis.operations.courses import (
-    update_course_settings_logic,
-    create_course_logic,
-    update_advanced_settings_logic,
-    enable_configure_certificates_logic,
-    control_unit_availability_logic,
-    add_html_content_logic,
-    add_video_content_logic,
-    add_problem_content_logic,
     add_discussion_content_logic,
+    add_html_content_logic,
+    add_problem_content_logic,
+    add_video_content_logic,
+    control_unit_availability_logic,
+    create_course_logic,
     create_course_structure_logic,
+    enable_configure_certificates_logic,
+    update_advanced_settings_logic,
+    update_course_settings_logic,
 )
+from openedx_owly_apis.permissions import (
+    IsAdminOrCourseCreator,
+    IsAdminOrCourseCreatorOrCourseStaff,
+    IsAdminOrCourseStaff,
+)
+
 
 class OpenedXCourseViewSet(viewsets.ViewSet):
     """

@@ -11,23 +11,18 @@ Determina:
 Uso:
 GET /owly-roles/me?course_id=course-v1:ORG+NUM+RUN&org=ORG
 """
-from rest_framework import viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.permissions import IsAuthenticated
-from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
-from openedx.core.lib.api.authentication import BearerAuthentication
-
 from typing import Optional
 
+from common.djangoapps.student.auth import CourseCreatorRole, OrgContentCreatorRole, user_has_role
+from common.djangoapps.student.roles import CourseInstructorRole, CourseLimitedStaffRole, CourseStaffRole
+from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
 from opaque_keys.edx.keys import CourseKey
-from common.djangoapps.student.roles import (
-    CourseStaffRole,
-    CourseInstructorRole,
-    CourseLimitedStaffRole,
-)
-from common.djangoapps.student.auth import user_has_role, CourseCreatorRole, OrgContentCreatorRole
+from openedx.core.lib.api.authentication import BearerAuthentication
+from rest_framework import viewsets
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 
 class OpenedXRolesViewSet(viewsets.ViewSet):
@@ -74,9 +69,10 @@ class OpenedXRolesViewSet(viewsets.ViewSet):
     def me(self, request):
         """
         Devuelve el rol efectivo del usuario autenticado.
+
         Query params opcionales:
-          - course_id: para evaluar si es staff del curso
-          - org: para evaluar course creator a nivel organización
+        - course_id: para evaluar si es staff del curso
+        - org: para evaluar course creator a nivel organización
         """
         user = request.user
         course_id = request.query_params.get("course_id")

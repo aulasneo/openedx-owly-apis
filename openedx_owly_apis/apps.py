@@ -3,7 +3,7 @@ openedx_owly_apis Django application initialization.
 """
 
 from django.apps import AppConfig
-from edx_django_utils.plugins.constants import PluginURLs, PluginSettings
+from edx_django_utils.plugins.constants import PluginSettings, PluginURLs
 
 
 class OpenedxOwlyApisConfig(AppConfig):

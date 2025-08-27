@@ -32,6 +32,7 @@ INSTALLED_APPS = (
     'django.contrib.contenttypes',
     'django.contrib.messages',
     'django.contrib.sessions',
+    'rest_framework',
     'openedx_owly_apis',
 )
 
@@ -39,7 +40,7 @@ LOCALE_PATHS = [
     root('openedx_owly_apis', 'conf', 'locale'),
 ]
 
-ROOT_URLCONF = 'openedx_owly_apis.urls'
+ROOT_URLCONF = 'tests.urls'
 
 SECRET_KEY = 'insecure-secret-key'
 

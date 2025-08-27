@@ -1,6 +1,29 @@
+[TYPECHECK]
+ignored-modules=
+    openedx.core.djangoapps.content.course_overviews.models,
+    opaque_keys.edx.keys,
+    openedx.core.djangoapps.discussions.models,
+    openedx.core.djangoapps.enrollments.data,
+    common.djangoapps.student.models,
+    common.djangoapps.course_modes.models,
+    common.djangoapps.student.roles,
+    common.djangoapps.student.auth,
+    xmodule.modulestore,
+    xmodule.modulestore.exceptions,
+    edx_rest_framework_extensions.auth.jwt.authentication,
+    openedx.core.lib.api.authentication,
+    rest_framework,
+    rest_framework.decorators,
+    rest_framework.response,
+    rest_framework.authentication,
+    rest_framework.permissions,
+    setuptools
 # pylintrc tweaks for use with edx_lint.
 [MASTER]
-ignore = migrations
+# Ignore Django migrations and heavy Open edX operation modules during pylint
+ignore = migrations, openedx_owly_apis/operations
+ignore-patterns=
+    openedx_owly_apis/operations/.*\.py
 load-plugins = edx_lint.pylint,pylint_django,pylint_celery
 
 [MESSAGES CONTROL]
@@ -9,3 +32,8 @@ disable+=
     django-not-configured,
     consider-using-with,
     bad-option-value,
+    wrong-import-order,
+    wrong-import-position,
+    missing-docstring,
+    useless-suppression,
+

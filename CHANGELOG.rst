@@ -33,6 +33,6 @@ Added
 * Authentication via ``JwtAuthentication`` and ``SessionAuthentication`` across ViewSets.
 
 Documentation
-============
+=============
 
 * README: comprehensive API overview, endpoint list, and Tutor plugin installation instructions for ``tutor-contrib-owly``.

@@ -6,3 +6,6 @@
 pytest-cov                # pytest extension for code coverage statistics
 pytest-django             # pytest extension for better Django support
 code-annotations          # provides commands used by the pii_check make target.
+edx-django-utils          # required at import time during tests for apps.py plugin hooks
+djangorestframework       # DRF required by viewsets and routers during tests
+edx-drf-extensions        # Provides edx_rest_framework_extensions used by JwtAuthentication

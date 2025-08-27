@@ -35,9 +35,16 @@ jobs:
         run: tox
 
       - name: Run coverage
-        if: matrix.python-version == '3.12' && matrix.toxenv == 'django42'
+        # Skip Codecov on forked PRs and when token is not available (e.g., protected branches or private repos).
+        if: |
+          matrix.python-version == '3.12' &&
+          matrix.toxenv == 'django42' &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) &&
+          env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v4
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           flags: unittests
           fail_ci_if_error: true
