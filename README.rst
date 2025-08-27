@@ -117,8 +117,7 @@ Requires: Authenticated user.
   - ``authenticated``
 
 Permissions and Authentication
-*****************************
-
+********************************
 - Authentication classes: JWT (``JwtAuthentication``), Bearer (``BearerAuthentication``), Session.
 - Permissions:
 

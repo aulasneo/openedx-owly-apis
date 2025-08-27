@@ -133,6 +133,7 @@ setup(
     version=VERSION,
     description="""One-line description for README and other doc files.""",
     long_description=README + '\n\n' + CHANGELOG,
+    long_description_content_type='text/x-rst',
     author='lberoes@aulasneo.com',
     author_email='lberoes@aulasneo.com',
     url='https://github.com/aulasneo/openedx-owly-apis',
