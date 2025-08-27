@@ -1,145 +1,148 @@
 openedx-owly-apis
 #################
 
-.. note::
-
-  This README was auto-generated. Maintainer: please review its contents and
-  update all relevant sections. Instructions to you are marked with
-  "PLACEHOLDER" or "TODO". Update or remove those sections, and remove this
-  note when you are done.
-
-|pypi-badge| |ci-badge| |codecov-badge| |doc-badge| |pyversions-badge|
-|license-badge| |status-badge|
-
-Purpose
-*******
-
-One-line description for README and other doc files.
-
-TODO: The ``README.rst`` file should start with a brief description of the repository and its purpose.
-It should be described in the context of other repositories under the ``openedx``
-organization. It should make clear where this fits into the overall Open edX
-codebase and should be oriented towards people who are new to the Open edX
-project.
-
-Getting Started with Development
+Extra API endpoints for Open edX
 ********************************
 
-Please see the Open edX documentation for `guidance on Python development`_ in this repo.
+This Django app provides additional REST API endpoints for Open edX to enable advanced features such as analytics, course management, and role inspection. It is intended to be deployed inside an Open edX platform using Tutor.
 
-.. _guidance on Python development: https://docs.openedx.org/en/latest/developers/how-tos/get-ready-for-python-dev.html
+Installation (via Tutor plugin)
+*******************************
 
-Deploying
-*********
+Use the Tutor plugin from aulasneo to install and enable these APIs inside your Open edX deployment:
 
-TODO: How can a new user go about deploying this component? Is it just a few
-commands? Is there a larger how-to that should be linked here?
+- Repository: https://github.com/aulasneo/tutor-contrib-owly
 
-PLACEHOLDER: For details on how to deploy this component, see the `deployment how-to`_.
+Quick start with Tutor:
 
-.. _deployment how-to: https://docs.openedx.org/projects/openedx-owly-apis/how-tos/how-to-deploy-this-component.html
+1. Install the plugin
 
-Getting Help
-************
+   .. code-block:: bash
 
-Documentation
-=============
+      tutor plugins install git+https://github.com/aulasneo/tutor-contrib-owly.git
 
-PLACEHOLDER: Start by going through `the documentation`_.  If you need more help see below.
+2. Enable and configure
 
-.. _the documentation: https://docs.openedx.org/projects/openedx-owly-apis
+   .. code-block:: bash
 
-(TODO: `Set up documentation <https://openedx.atlassian.net/wiki/spaces/DOC/pages/21627535/Publish+Documentation+on+Read+the+Docs>`_)
+      tutor plugins enable owly
+      tutor config save
 
-More Help
-=========
+3. Apply and start
 
-If you're having trouble, we have discussion forums at
-https://discuss.openedx.org where you can connect with others in the
-community.
+   .. code-block:: bash
 
-Our real-time conversations are on Slack. You can request a `Slack
-invitation`_, then join our `community Slack workspace`_.
+      tutor images build openedx
+      tutor local launch
 
-For anything non-trivial, the best path is to open an issue in this
-repository with as many details about the issue you are facing as you
-can provide.
+Once enabled, the app is included in LMS and exposes endpoints under the paths registered by ``openedx_owly_apis/urls.py``.
 
-https://github.com/aulasneo/openedx-owly-apis/issues
+API Summary
+***********
 
-For more information about these options, see the `Getting Help <https://openedx.org/getting-help>`__ page.
+Base router registrations are defined in ``openedx_owly_apis/urls.py``:
 
-.. _Slack invitation: https://openedx.org/slack
-.. _community Slack workspace: https://openedx.slack.com/
+- ``/owly-analytics/`` → ``OpenedXAnalyticsViewSet``
+- ``/owly-courses/`` → ``OpenedXCourseViewSet``
+- ``/owly-roles/`` → ``OpenedXRolesViewSet``
+
+Authentication is supported via JWT/Bearer/Session. Specific permissions are enforced per endpoint (see notes below).
+
+Analytics endpoints (GET)
+=========================
+
+ViewSet: ``openedx_owly_apis/views/analytics.py``
+Requires: Admin or Course Staff permissions.
+
+- ``GET /owly-analytics/overview?course_id=<course-key>``
+  Returns overview analytics for a course or platform-wide stats.
+
+- ``GET /owly-analytics/enrollments?course_id=<course-key>``
+  Returns detailed enrollment analytics for a course.
+
+- ``GET /owly-analytics/discussions?course_id=<course-key>``
+  Returns forum analytics and configuration for a course.
+
+- ``GET /owly-analytics/detailed?course_id=<course-key>``
+  Returns a comprehensive, combined analytics payload for a course.
+
+Course management endpoints (POST)
+==================================
+
+ViewSet: ``openedx_owly_apis/views/courses.py``
+Requires: Authenticated user. Additional role-based permissions per action.
+
+- ``POST /owly-courses/create``
+  Create a new course. Requires admin or course creator.
+
+- ``POST /owly-courses/structure``
+  Create or edit course structure. Requires admin, course creator, or course staff.
+
+- ``POST /owly-courses/content/html``
+  Add HTML content to a vertical. Requires admin, course creator, or course staff.
+
+- ``POST /owly-courses/content/video``
+  Add video content to a vertical. Requires admin, course creator, or course staff.
+
+- ``POST /owly-courses/content/problem``
+  Add problems/exercises to a vertical. Requires admin, course creator, or course staff.
+
+- ``POST /owly-courses/content/discussion``
+  Add discussion components to a vertical. Requires admin, course creator, or course staff.
+
+- ``POST /owly-courses/settings/update``
+  Update general course settings (dates, details, etc.). Requires admin or course staff.
+
+- ``POST /owly-courses/settings/advanced``
+  Update advanced course settings. Requires admin or course staff.
+
+- ``POST /owly-courses/certificates/configure``
+  Configure course certificates. Requires admin or course staff.
+
+- ``POST /owly-courses/units/availability/control``
+  Control unit availability and due dates. Requires admin or course staff.
+
+Roles endpoint (GET)
+====================
+
+ViewSet: ``openedx_owly_apis/views/roles.py``
+Requires: Authenticated user.
+
+- ``GET /owly-roles/me?course_id=<course-key>&org=<org-key>``
+  Returns the effective role of the authenticated user, including flags for:
+
+  - ``superadmin`` (Django superuser or global staff)
+  - ``course_staff`` (instructor/staff/limited_staff for given course)
+  - ``course_creator`` (global or org-specific according to platform settings)
+  - ``authenticated``
+
+Permissions and Authentication
+*****************************
+
+- Authentication classes: JWT (``JwtAuthentication``), Bearer (``BearerAuthentication``), Session.
+- Permissions:
+
+  - Analytics: ``IsAdminOrCourseStaff``
+  - Courses: action-specific guards such as ``IsAdminOrCourseCreator``, ``IsAdminOrCourseCreatorOrCourseStaff``, ``IsAdminOrCourseStaff``
+  - Roles: ``IsAuthenticated``
+
+Development
+***********
+
+- Source paths of interest:
+
+  - Views: ``openedx_owly_apis/views/``
+  - Operations logic: ``openedx_owly_apis/operations/``
+  - URL routing: ``openedx_owly_apis/urls.py``
 
 License
 *******
 
-The code in this repository is licensed under the AGPL 3.0 unless
-otherwise noted.
+AGPL-3.0. See `LICENSE.txt <LICENSE.txt>`_.
 
-Please see `LICENSE.txt <LICENSE.txt>`_ for details.
+Project Links
+*************
 
-Contributing
-************
+- CI: https://github.com/aulasneo/openedx-owly-apis/actions/workflows/ci.yml
+- Issues: https://github.com/aulasneo/openedx-owly-apis/issues
 
-Contributions are very welcome.
-Please read `How To Contribute <https://openedx.org/r/how-to-contribute>`_ for details.
-
-This project is currently accepting all types of contributions, bug fixes,
-security fixes, maintenance work, or new features.  However, please make sure
-to discuss your new feature idea with the maintainers before beginning development
-to maximize the chances of your change being accepted.
-You can start a conversation by creating a new issue on this repo summarizing
-your idea.
-
-The Open edX Code of Conduct
-****************************
-
-All community members are expected to follow the `Open edX Code of Conduct`_.
-
-.. _Open edX Code of Conduct: https://openedx.org/code-of-conduct/
-
-People
-******
-
-The assigned maintainers for this component and other project details may be
-found in `Backstage`_. Backstage pulls this data from the ``catalog-info.yaml``
-file in this repo.
-
-.. _Backstage: https://backstage.openedx.org/catalog/default/component/openedx-owly-apis
-
-Reporting Security Issues
-*************************
-
-Please do not report security issues in public. Please email security@openedx.org.
-
-.. |pypi-badge| image:: https://img.shields.io/pypi/v/openedx-owly-apis.svg
-    :target: https://pypi.python.org/pypi/openedx-owly-apis/
-    :alt: PyPI
-
-.. |ci-badge| image:: https://github.com/aulasneo/openedx-owly-apis/actions/workflows/ci.yml/badge.svg?branch=main
-    :target: https://github.com/aulasneo/openedx-owly-apis/actions/workflows/ci.yml
-    :alt: CI
-
-.. |codecov-badge| image:: https://codecov.io/github/aulasneo/openedx-owly-apis/coverage.svg?branch=main
-    :target: https://codecov.io/github/aulasneo/openedx-owly-apis?branch=main
-    :alt: Codecov
-
-.. |doc-badge| image:: https://readthedocs.org/projects/openedx-owly-apis/badge/?version=latest
-    :target: https://docs.openedx.org/projects/openedx-owly-apis
-    :alt: Documentation
-
-.. |pyversions-badge| image:: https://img.shields.io/pypi/pyversions/openedx-owly-apis.svg
-    :target: https://pypi.python.org/pypi/openedx-owly-apis/
-    :alt: Supported Python versions
-
-.. |license-badge| image:: https://img.shields.io/github/license/aulasneo/openedx-owly-apis.svg
-    :target: https://github.com/aulasneo/openedx-owly-apis/blob/main/LICENSE.txt
-    :alt: License
-
-.. TODO: Choose one of the statuses below and remove the other status-badge lines.
-.. |status-badge| image:: https://img.shields.io/badge/Status-Experimental-yellow
-.. .. |status-badge| image:: https://img.shields.io/badge/Status-Maintained-brightgreen
-.. .. |status-badge| image:: https://img.shields.io/badge/Status-Deprecated-orange
-.. .. |status-badge| image:: https://img.shields.io/badge/Status-Unsupported-red
