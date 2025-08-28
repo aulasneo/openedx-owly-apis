@@ -1595,3 +1595,179 @@ def _generate_generic_problem_xml(problem_data: dict, display_name: str) -> str:
 </problem>'''
     
     return xml
+
+
+def publish_content_logic(content_id: str, publish_type: str = "auto", user_identifier=None) -> dict:
+    """
+    Publish course content (courses, units, subsections, sections) in OpenEdX.
+    
+    Args:
+        content_id: OpenEdX content ID (course key or usage key format)
+        publish_type: Type of publishing - "auto", "manual", "course", "unit"
+        user_identifier: User making the request
+        
+    Returns:
+        Dict with success status and publishing details
+    """
+    import logging
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey, UsageKey
+    from xmodule.modulestore.django import modulestore
+    from cms.djangoapps.contentstore.utils import get_course_and_check_access
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info(
+            "publish_content start content_id=%s publish_type=%s requested_by=%s",
+            content_id, publish_type, str(user_identifier)
+        )
+        
+        User = get_user_model()
+        if user_identifier:
+            try:
+                acting_user = User.objects.get(id=user_identifier)
+            except User.DoesNotExist:
+                acting_user = User.objects.get(username=user_identifier)
+        else:
+            acting_user = User.objects.filter(is_superuser=True).first()
+            
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "user_not_found",
+                "message": "Valid user required for publishing",
+                "content_id": content_id
+            }
+        
+        store = modulestore()
+        
+        # Determine if this is a course or unit/component
+        try:
+            # Try parsing as CourseKey first
+            course_key = CourseKey.from_string(content_id)
+            is_course = True
+            logger.info(f"Detected course key: {course_key}")
+        except:
+            try:
+                # Try parsing as UsageKey
+                usage_key = UsageKey.from_string(content_id)
+                course_key = usage_key.course_key
+                is_course = False
+                logger.info(f"Detected usage key: {usage_key} for course: {course_key}")
+            except Exception as parse_error:
+                return {
+                    "success": False,
+                    "error": "invalid_content_id",
+                    "message": f"Invalid content ID format: {parse_error}",
+                    "content_id": content_id
+                }
+        
+        # Get course and check access
+        try:
+            course = get_course_and_check_access(course_key, acting_user)
+        except Exception as access_error:
+            return {
+                "success": False,
+                "error": "access_denied",
+                "message": f"Access denied or course not found: {access_error}",
+                "content_id": content_id,
+                "user": acting_user.username
+            }
+        
+        published_items = []
+        
+        if is_course or publish_type == "course":
+            # Publish entire course
+            try:
+                # Mark course as published
+                if hasattr(course, 'course_visibility'):
+                    course.course_visibility = 'public'
+                    store.update_item(course, acting_user.id)
+                
+                published_items.append({
+                    "type": "course",
+                    "id": str(course_key),
+                    "display_name": course.display_name
+                })
+                
+                logger.info(f"Successfully published course: {course_key}")
+                
+            except Exception as course_error:
+                logger.exception(f"Error publishing course: {course_error}")
+                return {
+                    "success": False,
+                    "error": "course_publish_failed",
+                    "message": f"Failed to publish course: {course_error}",
+                    "content_id": content_id
+                }
+        else:
+            # Publish specific unit/component
+            try:
+                usage_key = UsageKey.from_string(content_id)
+                xblock = store.get_item(usage_key)
+                
+                if not xblock:
+                    return {
+                        "success": False,
+                        "error": "content_not_found",
+                        "message": f"Content not found: {usage_key}",
+                        "content_id": content_id
+                    }
+                
+                # Publish the xblock
+                store.publish(usage_key, acting_user.id)
+                
+                published_items.append({
+                    "type": xblock.category,
+                    "id": str(usage_key),
+                    "display_name": getattr(xblock, 'display_name', 'Unnamed')
+                })
+                
+                # If this is a sequential or chapter, also publish children
+                if publish_type == "auto" and xblock.category in ['sequential', 'chapter']:
+                    children_published = []
+                    for child_usage_key in xblock.children:
+                        try:
+                            store.publish(child_usage_key, acting_user.id)
+                            child_xblock = store.get_item(child_usage_key)
+                            children_published.append({
+                                "type": child_xblock.category,
+                                "id": str(child_usage_key),
+                                "display_name": getattr(child_xblock, 'display_name', 'Unnamed')
+                            })
+                        except Exception as child_error:
+                            logger.warning(f"Failed to publish child {child_usage_key}: {child_error}")
+                    
+                    published_items.extend(children_published)
+                
+                logger.info(f"Successfully published content: {usage_key}")
+                
+            except Exception as unit_error:
+                logger.exception(f"Error publishing unit: {unit_error}")
+                return {
+                    "success": False,
+                    "error": "unit_publish_failed", 
+                    "message": f"Failed to publish unit: {unit_error}",
+                    "content_id": content_id
+                }
+        
+        return {
+            "success": True,
+            "content_id": content_id,
+            "publish_type": publish_type,
+            "published_items": published_items,
+            "total_published": len(published_items),
+            "message": f"Successfully published {len(published_items)} item(s)",
+            "published_by": acting_user.username
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error in publish_content_logic: {e}")
+        return {
+            "success": False,
+            "error": "publish_failed",
+            "message": str(e),
+            "content_id": content_id,
+            "requested_by": str(user_identifier)
+        }

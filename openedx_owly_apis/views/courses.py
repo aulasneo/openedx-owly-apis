@@ -22,6 +22,7 @@ from openedx_owly_apis.operations.courses import (
     create_openedx_problem_logic,
     create_openedx_unit_logic,
     enable_configure_certificates_logic,
+    publish_content_logic,
     update_advanced_settings_logic,
     update_course_settings_logic,
 )
@@ -263,6 +264,22 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             parent_locator=data.get('parent_locator'),
             component_type=data.get('component_type', 'vertical'),
             display_name=data.get('display_name', 'New Unit'),
+            user_identifier=request.user.id
+        )
+        return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='content/publish',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def publish_content(self, request):
+        """Publish course content (courses, units, subsections, sections)"""
+        data = request.data
+        result = publish_content_logic(
+            content_id=data.get('content_id'),
+            publish_type=data.get('publish_type', 'auto'),
             user_identifier=request.user.id
         )
         return Response(result)
