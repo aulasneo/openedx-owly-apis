@@ -19,6 +19,8 @@ from openedx_owly_apis.operations.courses import (
     control_unit_availability_logic,
     create_course_logic,
     create_course_structure_logic,
+    create_openedx_problem_logic,
+    create_openedx_unit_logic,
     enable_configure_certificates_logic,
     update_advanced_settings_logic,
     update_course_settings_logic,
@@ -226,6 +228,41 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         result = control_unit_availability_logic(
             unit_id=data.get('unit_id'),
             availability_config=data.get('availability_config', {}),
+            user_identifier=request.user.id
+        )
+        return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='content/problem/create',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
+    )
+    def create_problem(self, request):
+        """Create a problem component in an OpenEdX course unit"""
+        data = request.data
+        result = create_openedx_problem_logic(
+            unit_locator=data.get('unit_locator'),
+            problem_type=data.get('problem_type', 'multiplechoiceresponse'),
+            display_name=data.get('display_name', 'New Problem'),
+            problem_data=data.get('problem_data', {}),
+            user_identifier=request.user.id
+        )
+        return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='units/create',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
+    )
+    def create_unit(self, request):
+        """Create a new unit, subsection, or section in an OpenEdX course"""
+        data = request.data
+        result = create_openedx_unit_logic(
+            parent_locator=data.get('parent_locator'),
+            component_type=data.get('component_type', 'vertical'),
+            display_name=data.get('display_name', 'New Unit'),
             user_identifier=request.user.id
         )
         return Response(result)

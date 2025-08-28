@@ -1315,3 +1315,283 @@ def control_unit_availability_logic(unit_id: str, availability_config: dict, use
             "unit_id": unit_id,
             "requested_by": str(user_identifier)
         }
+
+
+def create_openedx_problem_logic(unit_locator: str, problem_type: str, display_name: str, problem_data: dict, user_identifier=None) -> dict:
+    """Create a problem component in an OpenEdX course unit"""
+    
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import UsageKey
+    from xmodule.modulestore.django import modulestore
+    from xblock.core import XBlock
+    
+    try:
+        logger.info(
+            "create_openedx_problem start unit_locator=%s problem_type=%s requested_by=%s",
+            unit_locator, problem_type, str(user_identifier)
+        )
+        
+        User = get_user_model()
+        acting_user = _get_acting_user(user_identifier)
+        
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+        
+        # Parse unit locator
+        try:
+            unit_key = UsageKey.from_string(unit_locator)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_unit_locator",
+                "message": f"Invalid unit_locator format: {unit_locator}"
+            }
+        
+        # Get modulestore and unit
+        store = modulestore()
+        unit = store.get_item(unit_key)
+        
+        if not unit:
+            return {
+                "success": False,
+                "error": "unit_not_found",
+                "message": f"Unit not found: {unit_locator}"
+            }
+        
+        # Generate problem XML based on type
+        problem_xml = _generate_problem_xml(problem_type, problem_data, display_name)
+        
+        # Create new problem XBlock
+        new_problem = store.create_child(
+            acting_user.id,
+            unit_key,
+            "problem",
+            block_id=None,
+            fields={
+                "display_name": display_name,
+                "data": problem_xml
+            }
+        )
+        
+        logger.info(f"Successfully created problem {new_problem.location} in unit {unit_locator}")
+        
+        return {
+            "success": True,
+            "unit_locator": unit_locator,
+            "problem_locator": str(new_problem.location),
+            "problem_type": problem_type,
+            "display_name": display_name,
+            "problem_data": problem_data,
+            "message": f"Successfully created {problem_type} problem in unit"
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error creating problem: {e}")
+        return {
+            "success": False,
+            "error": "creation_failed",
+            "message": str(e),
+            "unit_locator": unit_locator,
+            "requested_by": str(user_identifier)
+        }
+
+
+def create_openedx_unit_logic(parent_locator: str, component_type: str, display_name: str, user_identifier=None) -> dict:
+    """Create a new unit, subsection, or section in an OpenEdX course"""
+    
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import UsageKey
+    from xmodule.modulestore.django import modulestore
+    
+    try:
+        logger.info(
+            "create_openedx_unit start parent_locator=%s component_type=%s requested_by=%s",
+            parent_locator, component_type, str(user_identifier)
+        )
+        
+        User = get_user_model()
+        acting_user = _get_acting_user(user_identifier)
+        
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+        
+        # Validate component type
+        valid_types = ['vertical', 'sequential', 'chapter']
+        if component_type not in valid_types:
+            return {
+                "success": False,
+                "error": "invalid_component_type",
+                "message": f"Component type must be one of: {valid_types}"
+            }
+        
+        # Parse parent locator
+        try:
+            parent_key = UsageKey.from_string(parent_locator)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_parent_locator",
+                "message": f"Invalid parent_locator format: {parent_locator}"
+            }
+        
+        # Get modulestore and parent
+        store = modulestore()
+        parent = store.get_item(parent_key)
+        
+        if not parent:
+            return {
+                "success": False,
+                "error": "parent_not_found",
+                "message": f"Parent not found: {parent_locator}"
+            }
+        
+        # Create new component
+        new_component = store.create_child(
+            acting_user.id,
+            parent_key,
+            component_type,
+            block_id=None,
+            fields={
+                "display_name": display_name
+            }
+        )
+        
+        logger.info(f"Successfully created {component_type} {new_component.location} in parent {parent_locator}")
+        
+        return {
+            "success": True,
+            "parent_locator": parent_locator,
+            "component_locator": str(new_component.location),
+            "component_type": component_type,
+            "display_name": display_name,
+            "message": f"Successfully created {component_type} component"
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error creating {component_type}: {e}")
+        return {
+            "success": False,
+            "error": "creation_failed",
+            "message": str(e),
+            "parent_locator": parent_locator,
+            "requested_by": str(user_identifier)
+        }
+
+
+def _generate_problem_xml(problem_type: str, problem_data: dict, display_name: str) -> str:
+    """Generate XML for different problem types"""
+    
+    if problem_type == "multiplechoiceresponse":
+        return _generate_multiple_choice_xml(problem_data, display_name)
+    elif problem_type == "numericalresponse":
+        return _generate_numerical_xml(problem_data, display_name)
+    elif problem_type == "stringresponse":
+        return _generate_string_response_xml(problem_data, display_name)
+    elif problem_type == "choiceresponse":
+        return _generate_choice_response_xml(problem_data, display_name)
+    else:
+        return _generate_generic_problem_xml(problem_data, display_name)
+
+
+def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
+    """Generate XML for multiple choice problems"""
+    
+    question_text = problem_data.get('question_text', 'Enter your question here')
+    choices = problem_data.get('choices', [
+        {'text': 'Option A', 'correct': True},
+        {'text': 'Option B', 'correct': False},
+        {'text': 'Option C', 'correct': False}
+    ])
+    
+    xml = f'''<problem display_name="{display_name}">
+    <multiplechoiceresponse>
+        <p>{question_text}</p>
+        <choicegroup type="MultipleChoice">'''
+    
+    for choice in choices:
+        correct = 'correct="true"' if choice.get('correct', False) else ''
+        xml += f'\n            <choice {correct}>{choice.get("text", "")}</choice>'
+    
+    xml += '''
+        </choicegroup>
+    </multiplechoiceresponse>
+</problem>'''
+    
+    return xml
+
+
+def _generate_numerical_xml(problem_data: dict, display_name: str) -> str:
+    """Generate XML for numerical response problems"""
+    
+    question_text = problem_data.get('question_text', 'Enter your numerical question here')
+    correct_answer = problem_data.get('correct_answer', '42')
+    tolerance = problem_data.get('tolerance', '0.01')
+    
+    xml = f'''<problem display_name="{display_name}">
+    <numericalresponse answer="{correct_answer}">
+        <p>{question_text}</p>
+        <responseparam type="tolerance" default="{tolerance}"/>
+        <textline size="20"/>
+    </numericalresponse>
+</problem>'''
+    
+    return xml
+
+
+def _generate_string_response_xml(problem_data: dict, display_name: str) -> str:
+    """Generate XML for string response problems"""
+    
+    question_text = problem_data.get('question_text', 'Enter your text question here')
+    correct_answer = problem_data.get('correct_answer', 'correct answer')
+    case_sensitive = problem_data.get('case_sensitive', False)
+    
+    type_attr = 'type="ci"' if not case_sensitive else ''
+    
+    xml = f'''<problem display_name="{display_name}">
+    <stringresponse answer="{correct_answer}" {type_attr}>
+        <p>{question_text}</p>
+        <textline size="20"/>
+    </stringresponse>
+</problem>'''
+    
+    return xml
+
+
+def _generate_choice_response_xml(problem_data: dict, display_name: str) -> str:
+    """Generate XML for choice response problems (checkboxes)"""
+    
+    question_text = problem_data.get('question_text', 'Select all correct options')
+    choices = problem_data.get('choices', [
+        {'text': 'Option A', 'correct': True},
+        {'text': 'Option B', 'correct': False},
+        {'text': 'Option C', 'correct': True}
+    ])
+    
+    xml = f'''<problem display_name="{display_name}">
+    <choiceresponse>
+        <p>{question_text}</p>
+        <checkboxgroup>'''
+    
+    for choice in choices:
+        correct = 'correct="true"' if choice.get('correct', False) else 'correct="false"'
+        xml += f'\n            <choice {correct}>{choice.get("text", "")}</choice>'
+    
+    xml += '''
+        </checkboxgroup>
+    </choiceresponse>
+</problem>'''
+    
+    return xml
+
+
+def _generate_generic_problem_xml(problem_data: dict, display_name: str) -> str:
+    """Generate generic problem XML"""
+    
+    question_text = problem_data.get('question_text', 'Enter your question here')
+    
+    xml = f'''<problem display_name="{display_name}">
+    <p>{question_text}</p>
+    <p>This is a generic problem. Please customize the XML as needed.</p>
+</problem>'''
+    
+    return xml
