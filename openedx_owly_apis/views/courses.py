@@ -251,3 +251,21 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
         return Response(result)
+        
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='xblock/delete',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def delete_xblock(self, request):
+        """
+        Delete an xblock component from a course
+        Mapped to delete_xblock_logic()
+        """
+        data = request.data
+        result = delete_xblock_logic(
+            block_id=data.get('block_id'),
+            user_identifier=request.user.id
+        )
+        return Response(result)
