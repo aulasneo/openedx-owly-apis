@@ -1723,9 +1723,145 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
     except Exception as e:
         logger.exception(f"Error in publish_content_logic: {e}")
         return {
-            "success": False,
-            "error": "publish_failed",
-            "message": str(e),
+            "success": True,
+            "message": f"Successfully published {len(published_items)} items",
+            "published_items": published_items,
             "content_id": content_id,
-            "requested_by": str(user_identifier)
+            "publish_type": publish_type
+        }
+
+
+def delete_xblock_logic(block_id, acting_user):
+    """
+    Delete an xblock component from OpenEdX course structure using modulestore.
+    
+    This function uses the OpenEdX modulestore to safely delete xblock components
+    and automatically handles course republishing.
+    
+    Args:
+        block_id (str): Complete xblock usage key (e.g: block-v1:Org+Course+Run+type@html+block@id)
+        acting_user: User performing the deletion
+        
+    Returns:
+        dict: Success/error response with details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import UsageKey, CourseKey
+    from xmodule.modulestore.django import modulestore
+    from cms.djangoapps.contentstore.utils import get_course_and_check_access
+    from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    User = get_user_model()
+    
+    # Validate user
+    if isinstance(acting_user, str):
+        try:
+            acting_user = User.objects.get(username=acting_user)
+        except User.DoesNotExist:
+            return {
+                "success": False,
+                "error": "user_not_found",
+                "message": f"User not found: {acting_user}",
+                "block_id": block_id
+            }
+    
+    # Parse usage key
+    try:
+        usage_key = UsageKey.from_string(block_id)
+        course_key = usage_key.course_key
+        logger.info(f"Deleting xblock: {usage_key} from course: {course_key}")
+    except Exception as parse_error:
+        return {
+            "success": False,
+            "error": "invalid_block_id",
+            "message": f"Invalid block ID format: {parse_error}",
+            "block_id": block_id
+        }
+    
+    # Get course and check access
+    try:
+        course = get_course_and_check_access(course_key, acting_user)
+    except Exception as access_error:
+        return {
+            "success": False,
+            "error": "access_denied",
+            "message": f"Access denied or course not found: {access_error}",
+            "block_id": block_id,
+            "user": acting_user.username
+        }
+    
+    # Get modulestore
+    store = modulestore()
+    
+    # Check if xblock exists
+    try:
+        xblock = store.get_item(usage_key)
+        if not xblock:
+            return {
+                "success": False,
+                "error": "xblock_not_found",
+                "message": f"XBlock not found: {block_id}",
+                "block_id": block_id
+            }
+        
+        # Get parent to remove child reference
+        parent_usage_key = store.get_parent_location(usage_key)
+        if parent_usage_key:
+            parent = store.get_item(parent_usage_key)
+            logger.info(f"Found parent: {parent_usage_key}")
+        else:
+            return {
+                "success": False,
+                "error": "no_parent_found",
+                "message": f"Cannot delete xblock without parent: {block_id}",
+                "block_id": block_id
+            }
+            
+    except Exception as get_error:
+        return {
+            "success": False,
+            "error": "xblock_retrieval_error",
+            "message": f"Error retrieving xblock: {get_error}",
+            "block_id": block_id
+        }
+    
+    # Perform deletion
+    try:
+        # Remove child from parent's children list
+        if hasattr(parent, 'children') and usage_key in parent.children:
+            parent.children.remove(usage_key)
+            store.update_item(parent, acting_user.id)
+            logger.info(f"Removed {usage_key} from parent children list")
+        
+        # Delete the xblock itself
+        store.delete_item(usage_key, acting_user.id)
+        logger.info(f"Successfully deleted xblock: {usage_key}")
+        
+        # Trigger course republishing
+        try:
+            # Update course overview to trigger republishing
+            CourseOverview.load_from_module_store(course_key)
+            logger.info(f"Triggered course republishing for: {course_key}")
+        except Exception as republish_error:
+            logger.warning(f"Could not trigger republishing: {republish_error}")
+        
+        return {
+            "success": True,
+            "message": f"Successfully deleted xblock: {block_id}",
+            "block_id": block_id,
+            "block_type": xblock.category if hasattr(xblock, 'category') else 'unknown',
+            "display_name": xblock.display_name if hasattr(xblock, 'display_name') else 'Unknown',
+            "course_id": str(course_key),
+            "parent_id": str(parent_usage_key) if parent_usage_key else None
+        }
+        
+    except Exception as delete_error:
+        logger.exception(f"Error deleting xblock {usage_key}")
+        return {
+            "success": False,
+            "error": "deletion_failed",
+            "message": f"Failed to delete xblock: {delete_error}",
+            "block_id": block_id
         }

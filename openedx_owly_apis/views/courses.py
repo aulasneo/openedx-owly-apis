@@ -12,18 +12,22 @@ from rest_framework.response import Response
 
 # Importar funciones lógicas originales
 from openedx_owly_apis.operations.courses import (
-    add_discussion_content_logic,
-    add_html_content_logic,
-    add_video_content_logic,
-    control_unit_availability_logic,
+    get_all_courses_logic,
+    get_course_details_logic,
+    get_course_blocks_details_logic,
+    get_course_analytics_logic,
     create_course_logic,
     create_course_structure_logic,
+    add_html_content_logic,
+    add_video_content_logic,
     create_openedx_problem_logic,
-    create_openedx_unit_logic,
-    enable_configure_certificates_logic,
-    publish_content_logic,
-    update_advanced_settings_logic,
+    control_unit_visibility_logic,
+    publish_course_content_logic,
     update_course_settings_logic,
+    update_advanced_settings_logic,
+    enable_configure_certificates_logic,
+    control_unit_availability_logic,
+    delete_xblock_logic
 )
 from openedx_owly_apis.permissions import (
     IsAdminOrCourseCreator,
