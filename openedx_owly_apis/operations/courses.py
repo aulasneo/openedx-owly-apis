@@ -1396,88 +1396,6 @@ def create_openedx_problem_logic(unit_locator: str, problem_type: str, display_n
         }
 
 
-def create_openedx_unit_logic(parent_locator: str, component_type: str, display_name: str, user_identifier=None) -> dict:
-    """Create a new unit, subsection, or section in an OpenEdX course"""
-    
-    from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import UsageKey
-    from xmodule.modulestore.django import modulestore
-    
-    try:
-        logger.info(
-            "create_openedx_unit start parent_locator=%s component_type=%s requested_by=%s",
-            parent_locator, component_type, str(user_identifier)
-        )
-        
-        User = get_user_model()
-        acting_user = _get_acting_user(user_identifier)
-        
-        if not acting_user:
-            return {"success": False, "error": "No acting user available"}
-        
-        # Validate component type
-        valid_types = ['vertical', 'sequential', 'chapter']
-        if component_type not in valid_types:
-            return {
-                "success": False,
-                "error": "invalid_component_type",
-                "message": f"Component type must be one of: {valid_types}"
-            }
-        
-        # Parse parent locator
-        try:
-            parent_key = UsageKey.from_string(parent_locator)
-        except Exception as e:
-            return {
-                "success": False,
-                "error": "invalid_parent_locator",
-                "message": f"Invalid parent_locator format: {parent_locator}"
-            }
-        
-        # Get modulestore and parent
-        store = modulestore()
-        parent = store.get_item(parent_key)
-        
-        if not parent:
-            return {
-                "success": False,
-                "error": "parent_not_found",
-                "message": f"Parent not found: {parent_locator}"
-            }
-        
-        # Create new component
-        new_component = store.create_child(
-            acting_user.id,
-            parent_key,
-            component_type,
-            block_id=None,
-            fields={
-                "display_name": display_name
-            }
-        )
-        
-        logger.info(f"Successfully created {component_type} {new_component.location} in parent {parent_locator}")
-        
-        return {
-            "success": True,
-            "parent_locator": parent_locator,
-            "component_locator": str(new_component.location),
-            "component_type": component_type,
-            "display_name": display_name,
-            "message": f"Successfully created {component_type} component"
-        }
-        
-    except Exception as e:
-        logger.exception(f"Error creating {component_type}: {e}")
-        return {
-            "success": False,
-            "error": "creation_failed",
-            "message": str(e),
-            "parent_locator": parent_locator,
-            "requested_by": str(user_identifier)
-        }
-
-
 def _generate_problem_xml(problem_type: str, problem_data: dict, display_name: str) -> str:
     """Generate XML for different problem types"""
     
@@ -1489,6 +1407,8 @@ def _generate_problem_xml(problem_type: str, problem_data: dict, display_name: s
         return _generate_string_response_xml(problem_data, display_name)
     elif problem_type == "choiceresponse":
         return _generate_choice_response_xml(problem_data, display_name)
+    elif problem_type == "optionresponse":
+        return _generate_dropdown_xml(problem_data, display_name)
     else:
         return _generate_generic_problem_xml(problem_data, display_name)
 
@@ -1592,6 +1512,44 @@ def _generate_generic_problem_xml(problem_data: dict, display_name: str) -> str:
     xml = f'''<problem display_name="{display_name}">
     <p>{question_text}</p>
     <p>This is a generic problem. Please customize the XML as needed.</p>
+</problem>'''
+    
+    return xml
+
+
+def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
+    """Generate XML for dropdown problems (optionresponse)"""
+    
+    question_text = problem_data.get('question_text', 'Select the correct option')
+    choices = problem_data.get('choices', [
+        {'text': 'Option A', 'correct': True},
+        {'text': 'Option B', 'correct': False},
+        {'text': 'Option C', 'correct': False}
+    ])
+    
+    # Find the correct answer
+    correct_answer = None
+    for choice in choices:
+        if choice.get('correct', False):
+            correct_answer = choice.get('text', '')
+            break
+    
+    if not correct_answer:
+        correct_answer = choices[0].get('text', 'Option A') if choices else 'Option A'
+    
+    xml = f'''<problem display_name="{display_name}">
+    <optionresponse>
+        <p>{question_text}</p>
+        <optioninput>'''
+    
+    # Add options to dropdown
+    for choice in choices:
+        correct_attr = ' correct="True"' if choice.get('correct', False) else ''
+        xml += f'\n            <option{correct_attr}>{choice.get("text", "")}</option>'
+    
+    xml += '''
+        </optioninput>
+    </optionresponse>
 </problem>'''
     
     return xml

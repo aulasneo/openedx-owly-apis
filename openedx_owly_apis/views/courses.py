@@ -14,7 +14,6 @@ from rest_framework.response import Response
 from openedx_owly_apis.operations.courses import (
     add_discussion_content_logic,
     add_html_content_logic,
-    add_problem_content_logic,
     add_video_content_logic,
     control_unit_availability_logic,
     create_course_logic,
@@ -125,24 +124,6 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         )
         return Response(result)
 
-    @action(
-        detail=False,
-        methods=['post'],
-        url_path='content/problem',
-        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
-    )
-    def add_problem_content(self, request):
-        """
-        Añadir problemas/ejercicios a un vertical
-        Mapea directamente a add_problem_content_logic()
-        """
-        data = request.data
-        result = add_problem_content_logic(
-            vertical_id=data.get('vertical_id'),
-            problem_config=data.get('problem_config'),
-            user_identifier=request.user.id
-        )
-        return Response(result)
 
     @action(
         detail=False,
@@ -247,23 +228,6 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             problem_type=data.get('problem_type', 'multiplechoiceresponse'),
             display_name=data.get('display_name', 'New Problem'),
             problem_data=data.get('problem_data', {}),
-            user_identifier=request.user.id
-        )
-        return Response(result)
-
-    @action(
-        detail=False,
-        methods=['post'],
-        url_path='units/create',
-        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
-    )
-    def create_unit(self, request):
-        """Create a new unit, subsection, or section in an OpenEdX course"""
-        data = request.data
-        result = create_openedx_unit_logic(
-            parent_locator=data.get('parent_locator'),
-            component_type=data.get('component_type', 'vertical'),
-            display_name=data.get('display_name', 'New Unit'),
             user_identifier=request.user.id
         )
         return Response(result)
