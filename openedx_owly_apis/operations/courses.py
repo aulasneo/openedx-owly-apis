@@ -1346,18 +1346,31 @@ def create_openedx_problem_logic(
         # Parse unit locator
         try:
             unit_key = UsageKey.from_string(unit_locator)
-        except Exception:
+            logger.info(f"Parsed unit_key successfully: {unit_key}")
+        except Exception as e:
+            logger.error(f"Failed to parse unit_locator '{unit_locator}': {e}")
             return {
                 "success": False,
                 "error": "invalid_unit_locator",
-                "message": f"Invalid unit_locator format: {unit_locator}"
+                "message": f"Invalid unit_locator format: {unit_locator}. Error: {str(e)}"
             }
 
         # Get modulestore and unit
-        store = modulestore()
-        unit = store.get_item(unit_key)
+        try:
+            store = modulestore()
+            logger.info(f"Got modulestore: {store}")
+            unit = store.get_item(unit_key)
+            logger.info(f"Retrieved unit: {unit}")
+        except Exception as e:
+            logger.error(f"Failed to get modulestore or unit: {e}")
+            return {
+                "success": False,
+                "error": "modulestore_error",
+                "message": f"Failed to access modulestore or unit: {str(e)}"
+            }
 
         if not unit:
+            logger.error(f"Unit not found for locator: {unit_locator}")
             return {
                 "success": False,
                 "error": "unit_not_found",
@@ -1365,21 +1378,37 @@ def create_openedx_problem_logic(
             }
 
         # Generate problem XML based on type
-        problem_xml = _generate_problem_xml(problem_type, problem_data, display_name)
+        try:
+            problem_xml = _generate_problem_xml(problem_type, problem_data, display_name)
+            logger.info(f"Generated XML for problem type {problem_type}: {problem_xml[:200]}...")
+        except Exception as e:
+            logger.error(f"Failed to generate XML: {e}")
+            return {
+                "success": False,
+                "error": "xml_generation_failed",
+                "message": f"Failed to generate problem XML: {str(e)}"
+            }
 
         # Create new problem XBlock
-        new_problem = store.create_child(
-            acting_user.id,
-            unit_key,
-            "problem",
-            block_id=None,
-            fields={
-                "display_name": display_name,
-                "data": problem_xml
+        try:
+            new_problem = store.create_child(
+                acting_user.id,
+                unit_key,
+                "problem",
+                block_id=None,
+                fields={
+                    "display_name": display_name,
+                    "data": problem_xml
+                }
+            )
+            logger.info(f"Successfully created problem {new_problem.location} in unit {unit_locator}")
+        except Exception as e:
+            logger.error(f"Failed to create XBlock: {e}")
+            return {
+                "success": False,
+                "error": "xblock_creation_failed",
+                "message": f"Failed to create XBlock: {str(e)}"
             }
-        )
-
-        logger.info(f"Successfully created problem {new_problem.location} in unit {unit_locator}")
 
         return {
             "success": True,
@@ -1738,42 +1767,40 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
         }
 
 
-def delete_xblock_logic(block_id, acting_user):
+def delete_xblock_logic(block_id, user_identifier=None):
     """
     Delete an xblock component from OpenEdX course structure using modulestore.
-
-    This function uses the OpenEdX modulestore to safely delete xblock components
-    and automatically handles course republishing.
+    
+    Based on OpenEdX's official delete_item implementation in split.py.
 
     Args:
         block_id (str): Complete xblock usage key (e.g: block-v1:Org+Course+Run+type@html+block@id)
-        acting_user: User performing the deletion
+        user_identifier: User identifier (id, username, email) performing the deletion
 
     Returns:
         dict: Success/error response with details
     """
     import logging
 
-    from cms.djangoapps.contentstore.utils import get_course_and_check_access
     from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import CourseKey, UsageKey
-    from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
+    from opaque_keys.edx.keys import UsageKey
     from xmodule.modulestore.django import modulestore
 
     logger = logging.getLogger(__name__)
     User = get_user_model()
 
-    # Validate user
-    if isinstance(acting_user, str):
-        try:
-            acting_user = User.objects.get(username=acting_user)
-        except User.DoesNotExist:
-            return {
-                "success": False,
-                "error": "user_not_found",
-                "message": f"User not found: {acting_user}",
-                "block_id": block_id
-            }
+    # Get acting user using the helper function
+    acting_user = _get_acting_user(user_identifier)
+    if not acting_user:
+        logger.error(f"No acting user found for identifier: {user_identifier}")
+        return {
+            "success": False,
+            "error": "user_not_found", 
+            "message": f"No acting user available for identifier: {user_identifier}",
+            "block_id": block_id
+        }
+    
+    logger.info(f"delete_xblock_logic called with block_id={block_id}, user={acting_user.username}")
 
     # Parse usage key
     try:
@@ -1781,6 +1808,7 @@ def delete_xblock_logic(block_id, acting_user):
         course_key = usage_key.course_key
         logger.info(f"Deleting xblock: {usage_key} from course: {course_key}")
     except Exception as parse_error:
+        logger.error(f"Failed to parse block_id '{block_id}': {parse_error}")
         return {
             "success": False,
             "error": "invalid_block_id",
@@ -1788,25 +1816,15 @@ def delete_xblock_logic(block_id, acting_user):
             "block_id": block_id
         }
 
-    # Get course and check access
+    # Get modulestore and use the official delete_item method
     try:
-        course = get_course_and_check_access(course_key, acting_user)
-    except Exception as access_error:
-        return {
-            "success": False,
-            "error": "access_denied",
-            "message": f"Access denied or course not found: {access_error}",
-            "block_id": block_id,
-            "user": acting_user.username
-        }
-
-    # Get modulestore
-    store = modulestore()
-
-    # Check if xblock exists
-    try:
-        xblock = store.get_item(usage_key)
-        if not xblock:
+        store = modulestore()
+        
+        # Check if xblock exists first
+        try:
+            xblock = store.get_item(usage_key)
+            logger.info(f"Found xblock to delete: {xblock.display_name} ({xblock.category})")
+        except Exception:
             return {
                 "success": False,
                 "error": "xblock_not_found",
@@ -1814,46 +1832,12 @@ def delete_xblock_logic(block_id, acting_user):
                 "block_id": block_id
             }
 
-        # Get parent to remove child reference
-        parent_usage_key = store.get_parent_location(usage_key)
-        if parent_usage_key:
-            parent = store.get_item(parent_usage_key)
-            logger.info(f"Found parent: {parent_usage_key}")
-        else:
-            return {
-                "success": False,
-                "error": "no_parent_found",
-                "message": f"Cannot delete xblock without parent: {block_id}",
-                "block_id": block_id
-            }
-
-    except Exception as get_error:
-        return {
-            "success": False,
-            "error": "xblock_retrieval_error",
-            "message": f"Error retrieving xblock: {get_error}",
-            "block_id": block_id
-        }
-
-    # Perform deletion
-    try:
-        # Remove child from parent's children list
-        if hasattr(parent, 'children') and usage_key in parent.children:
-            parent.children.remove(usage_key)
-            store.update_item(parent, acting_user.id)
-            logger.info(f"Removed {usage_key} from parent children list")
-
-        # Delete the xblock itself
-        store.delete_item(usage_key, acting_user.id)
+        # Use the official OpenEdX delete_item method
+        # This handles all the complexity: parent updates, structure versioning, etc.
+        result_course_key = store.delete_item(usage_key, acting_user.id)
+        
         logger.info(f"Successfully deleted xblock: {usage_key}")
-
-        # Trigger course republishing
-        try:
-            # Update course overview to trigger republishing
-            CourseOverview.load_from_module_store(course_key)
-            logger.info(f"Triggered course republishing for: {course_key}")
-        except Exception as republish_error:
-            logger.warning(f"Could not trigger republishing: {republish_error}")
+        logger.info(f"New course version: {result_course_key}")
 
         return {
             "success": True,
@@ -1862,14 +1846,24 @@ def delete_xblock_logic(block_id, acting_user):
             "block_type": xblock.category if hasattr(xblock, 'category') else 'unknown',
             "display_name": xblock.display_name if hasattr(xblock, 'display_name') else 'Unknown',
             "course_id": str(course_key),
-            "parent_id": str(parent_usage_key) if parent_usage_key else None
+            "new_course_version": str(result_course_key) if result_course_key else None
         }
 
+    except ValueError as value_error:
+        # This happens when trying to delete the course root or invalid operations
+        logger.error(f"ValueError in delete_item: {value_error}")
+        return {
+            "success": False,
+            "error": "invalid_operation",
+            "message": f"Cannot delete xblock: {value_error}",
+            "block_id": block_id
+        }
     except Exception as delete_error:
         logger.exception(f"Error deleting xblock {usage_key}")
         return {
             "success": False,
             "error": "deletion_failed",
             "message": f"Failed to delete xblock: {delete_error}",
-            "block_id": block_id
+            "block_id": block_id,
+            "user": acting_user.username
         }

@@ -281,6 +281,6 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         data = request.data
         result = delete_xblock_logic(
             block_id=data.get('block_id'),
-            acting_user=request.user
+            user_identifier=request.user.id
         )
         return Response(result)
