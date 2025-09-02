@@ -135,6 +135,10 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_courses.add_problem_content_logic = _simple_ret("add_problem_content_logic")
     ops_courses.add_discussion_content_logic = _simple_ret("add_discussion_content_logic")
     ops_courses.create_course_structure_logic = _simple_ret("create_course_structure_logic")
+    # Extras importados por las vistas aunque no se usen en estos tests
+    ops_courses.create_openedx_problem_logic = _simple_ret("create_openedx_problem_logic")
+    ops_courses.publish_content_logic = _simple_ret("publish_content_logic")
+    ops_courses.delete_xblock_logic = _simple_ret("delete_xblock_logic")
     sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
     stubs.append("openedx_owly_apis.operations.courses")
 

@@ -12,22 +12,19 @@ from rest_framework.response import Response
 
 # Importar funciones lógicas originales
 from openedx_owly_apis.operations.courses import (
-    get_all_courses_logic,
-    get_course_details_logic,
-    get_course_blocks_details_logic,
-    get_course_analytics_logic,
     create_course_logic,
     create_course_structure_logic,
     add_html_content_logic,
     add_video_content_logic,
+    add_discussion_content_logic,
+    add_problem_content_logic,
     create_openedx_problem_logic,
-    control_unit_visibility_logic,
-    publish_course_content_logic,
+    publish_content_logic,
     update_course_settings_logic,
     update_advanced_settings_logic,
     enable_configure_certificates_logic,
     control_unit_availability_logic,
-    delete_xblock_logic
+    delete_xblock_logic,
 )
 from openedx_owly_apis.permissions import (
     IsAdminOrCourseCreator,
@@ -124,6 +121,25 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         result = add_video_content_logic(
             vertical_id=data.get('vertical_id'),
             video_config=data.get('video_config'),
+            user_identifier=request.user.id
+        )
+        return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='content/problem',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
+    )
+    def add_problem_content(self, request):
+        """
+        Añadir problema (XML/edx) a un vertical
+        Mapea directamente a add_problem_content_logic()
+        """
+        data = request.data
+        result = add_problem_content_logic(
+            vertical_id=data.get('vertical_id'),
+            problem_config=data.get('problem_config'),
             user_identifier=request.user.id
         )
         return Response(result)
