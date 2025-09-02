@@ -1317,50 +1317,56 @@ def control_unit_availability_logic(unit_id: str, availability_config: dict, use
         }
 
 
-def create_openedx_problem_logic(unit_locator: str, problem_type: str, display_name: str, problem_data: dict, user_identifier=None) -> dict:
+def create_openedx_problem_logic(
+    unit_locator: str,
+    problem_type: str,
+    display_name: str,
+    problem_data: dict,
+    user_identifier=None,
+) -> dict:
     """Create a problem component in an OpenEdX course unit"""
-    
+
     from django.contrib.auth import get_user_model
     from opaque_keys.edx.keys import UsageKey
-    from xmodule.modulestore.django import modulestore
     from xblock.core import XBlock
-    
+    from xmodule.modulestore.django import modulestore
+
     try:
         logger.info(
             "create_openedx_problem start unit_locator=%s problem_type=%s requested_by=%s",
             unit_locator, problem_type, str(user_identifier)
         )
-        
+
         User = get_user_model()
         acting_user = _get_acting_user(user_identifier)
-        
+
         if not acting_user:
             return {"success": False, "error": "No acting user available"}
-        
+
         # Parse unit locator
         try:
             unit_key = UsageKey.from_string(unit_locator)
-        except Exception as e:
+        except Exception:
             return {
                 "success": False,
                 "error": "invalid_unit_locator",
                 "message": f"Invalid unit_locator format: {unit_locator}"
             }
-        
+
         # Get modulestore and unit
         store = modulestore()
         unit = store.get_item(unit_key)
-        
+
         if not unit:
             return {
                 "success": False,
                 "error": "unit_not_found",
                 "message": f"Unit not found: {unit_locator}"
             }
-        
+
         # Generate problem XML based on type
         problem_xml = _generate_problem_xml(problem_type, problem_data, display_name)
-        
+
         # Create new problem XBlock
         new_problem = store.create_child(
             acting_user.id,
@@ -1372,9 +1378,9 @@ def create_openedx_problem_logic(unit_locator: str, problem_type: str, display_n
                 "data": problem_xml
             }
         )
-        
+
         logger.info(f"Successfully created problem {new_problem.location} in unit {unit_locator}")
-        
+
         return {
             "success": True,
             "unit_locator": unit_locator,
@@ -1384,7 +1390,7 @@ def create_openedx_problem_logic(unit_locator: str, problem_type: str, display_n
             "problem_data": problem_data,
             "message": f"Successfully created {problem_type} problem in unit"
         }
-        
+
     except Exception as e:
         logger.exception(f"Error creating problem: {e}")
         return {
@@ -1398,7 +1404,7 @@ def create_openedx_problem_logic(unit_locator: str, problem_type: str, display_n
 
 def _generate_problem_xml(problem_type: str, problem_data: dict, display_name: str) -> str:
     """Generate XML for different problem types"""
-    
+
     if problem_type == "multiplechoiceresponse":
         return _generate_multiple_choice_xml(problem_data, display_name)
     elif problem_type == "numericalresponse":
@@ -1415,38 +1421,38 @@ def _generate_problem_xml(problem_type: str, problem_data: dict, display_name: s
 
 def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for multiple choice problems"""
-    
+
     question_text = problem_data.get('question_text', 'Enter your question here')
     choices = problem_data.get('choices', [
         {'text': 'Option A', 'correct': True},
         {'text': 'Option B', 'correct': False},
         {'text': 'Option C', 'correct': False}
     ])
-    
+
     xml = f'''<problem display_name="{display_name}">
     <multiplechoiceresponse>
         <p>{question_text}</p>
         <choicegroup type="MultipleChoice">'''
-    
+
     for choice in choices:
         correct = 'correct="true"' if choice.get('correct', False) else ''
         xml += f'\n            <choice {correct}>{choice.get("text", "")}</choice>'
-    
+
     xml += '''
         </choicegroup>
     </multiplechoiceresponse>
 </problem>'''
-    
+
     return xml
 
 
 def _generate_numerical_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for numerical response problems"""
-    
+
     question_text = problem_data.get('question_text', 'Enter your numerical question here')
     correct_answer = problem_data.get('correct_answer', '42')
     tolerance = problem_data.get('tolerance', '0.01')
-    
+
     xml = f'''<problem display_name="{display_name}">
     <numericalresponse answer="{correct_answer}">
         <p>{question_text}</p>
@@ -1454,133 +1460,134 @@ def _generate_numerical_xml(problem_data: dict, display_name: str) -> str:
         <textline size="20"/>
     </numericalresponse>
 </problem>'''
-    
+
     return xml
 
 
 def _generate_string_response_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for string response problems"""
-    
+
     question_text = problem_data.get('question_text', 'Enter your text question here')
     correct_answer = problem_data.get('correct_answer', 'correct answer')
     case_sensitive = problem_data.get('case_sensitive', False)
-    
+
     type_attr = 'type="ci"' if not case_sensitive else ''
-    
+
     xml = f'''<problem display_name="{display_name}">
     <stringresponse answer="{correct_answer}" {type_attr}>
         <p>{question_text}</p>
         <textline size="20"/>
     </stringresponse>
 </problem>'''
-    
+
     return xml
 
 
 def _generate_choice_response_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for choice response problems (checkboxes)"""
-    
+
     question_text = problem_data.get('question_text', 'Select all correct options')
     choices = problem_data.get('choices', [
         {'text': 'Option A', 'correct': True},
         {'text': 'Option B', 'correct': False},
         {'text': 'Option C', 'correct': True}
     ])
-    
+
     xml = f'''<problem display_name="{display_name}">
     <choiceresponse>
         <p>{question_text}</p>
         <checkboxgroup>'''
-    
+
     for choice in choices:
         correct = 'correct="true"' if choice.get('correct', False) else 'correct="false"'
         xml += f'\n            <choice {correct}>{choice.get("text", "")}</choice>'
-    
+
     xml += '''
         </checkboxgroup>
     </choiceresponse>
 </problem>'''
-    
+
     return xml
 
 
 def _generate_generic_problem_xml(problem_data: dict, display_name: str) -> str:
     """Generate generic problem XML"""
-    
+
     question_text = problem_data.get('question_text', 'Enter your question here')
-    
+
     xml = f'''<problem display_name="{display_name}">
     <p>{question_text}</p>
     <p>This is a generic problem. Please customize the XML as needed.</p>
 </problem>'''
-    
+
     return xml
 
 
 def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for dropdown problems (optionresponse)"""
-    
+
     question_text = problem_data.get('question_text', 'Select the correct option')
     choices = problem_data.get('choices', [
         {'text': 'Option A', 'correct': True},
         {'text': 'Option B', 'correct': False},
         {'text': 'Option C', 'correct': False}
     ])
-    
+
     # Find the correct answer
     correct_answer = None
     for choice in choices:
         if choice.get('correct', False):
             correct_answer = choice.get('text', '')
             break
-    
+
     if not correct_answer:
         correct_answer = choices[0].get('text', 'Option A') if choices else 'Option A'
-    
+
     xml = f'''<problem display_name="{display_name}">
     <optionresponse>
         <p>{question_text}</p>
         <optioninput>'''
-    
+
     # Add options to dropdown
     for choice in choices:
         correct_attr = ' correct="True"' if choice.get('correct', False) else ''
         xml += f'\n            <option{correct_attr}>{choice.get("text", "")}</option>'
-    
+
     xml += '''
         </optioninput>
     </optionresponse>
 </problem>'''
-    
+
     return xml
 
 
 def publish_content_logic(content_id: str, publish_type: str = "auto", user_identifier=None) -> dict:
     """
     Publish course content (courses, units, subsections, sections) in OpenEdX.
-    
+
     Args:
         content_id: OpenEdX content ID (course key or usage key format)
         publish_type: Type of publishing - "auto", "manual", "course", "unit"
         user_identifier: User making the request
-        
+
     Returns:
         Dict with success status and publishing details
     """
     import logging
+
+    from cms.djangoapps.contentstore.utils import get_course_and_check_access
     from django.contrib.auth import get_user_model
     from opaque_keys.edx.keys import CourseKey, UsageKey
     from xmodule.modulestore.django import modulestore
-    from cms.djangoapps.contentstore.utils import get_course_and_check_access
-    
+
     logger = logging.getLogger(__name__)
-    
+
     try:
         logger.info(
             "publish_content start content_id=%s publish_type=%s requested_by=%s",
             content_id, publish_type, str(user_identifier)
         )
-        
+
         User = get_user_model()
         if user_identifier:
             try:
@@ -1589,7 +1596,7 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                 acting_user = User.objects.get(username=user_identifier)
         else:
             acting_user = User.objects.filter(is_superuser=True).first()
-            
+
         if not acting_user:
             return {
                 "success": False,
@@ -1597,16 +1604,16 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                 "message": "Valid user required for publishing",
                 "content_id": content_id
             }
-        
+
         store = modulestore()
-        
+
         # Determine if this is a course or unit/component
         try:
             # Try parsing as CourseKey first
             course_key = CourseKey.from_string(content_id)
             is_course = True
             logger.info(f"Detected course key: {course_key}")
-        except:
+        except Exception:  # noqa: BLE001 - broad on purpose to detect format
             try:
                 # Try parsing as UsageKey
                 usage_key = UsageKey.from_string(content_id)
@@ -1620,7 +1627,7 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                     "message": f"Invalid content ID format: {parse_error}",
                     "content_id": content_id
                 }
-        
+
         # Get course and check access
         try:
             course = get_course_and_check_access(course_key, acting_user)
@@ -1632,9 +1639,9 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                 "content_id": content_id,
                 "user": acting_user.username
             }
-        
+
         published_items = []
-        
+
         if is_course or publish_type == "course":
             # Publish entire course
             try:
@@ -1642,15 +1649,15 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                 if hasattr(course, 'course_visibility'):
                     course.course_visibility = 'public'
                     store.update_item(course, acting_user.id)
-                
+
                 published_items.append({
                     "type": "course",
                     "id": str(course_key),
                     "display_name": course.display_name
                 })
-                
+
                 logger.info(f"Successfully published course: {course_key}")
-                
+
             except Exception as course_error:
                 logger.exception(f"Error publishing course: {course_error}")
                 return {
@@ -1664,7 +1671,7 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
             try:
                 usage_key = UsageKey.from_string(content_id)
                 xblock = store.get_item(usage_key)
-                
+
                 if not xblock:
                     return {
                         "success": False,
@@ -1672,16 +1679,16 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                         "message": f"Content not found: {usage_key}",
                         "content_id": content_id
                     }
-                
+
                 # Publish the xblock
                 store.publish(usage_key, acting_user.id)
-                
+
                 published_items.append({
                     "type": xblock.category,
                     "id": str(usage_key),
                     "display_name": getattr(xblock, 'display_name', 'Unnamed')
                 })
-                
+
                 # If this is a sequential or chapter, also publish children
                 if publish_type == "auto" and xblock.category in ['sequential', 'chapter']:
                     children_published = []
@@ -1696,20 +1703,20 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                             })
                         except Exception as child_error:
                             logger.warning(f"Failed to publish child {child_usage_key}: {child_error}")
-                    
+
                     published_items.extend(children_published)
-                
+
                 logger.info(f"Successfully published content: {usage_key}")
-                
+
             except Exception as unit_error:
                 logger.exception(f"Error publishing unit: {unit_error}")
                 return {
                     "success": False,
-                    "error": "unit_publish_failed", 
+                    "error": "unit_publish_failed",
                     "message": f"Failed to publish unit: {unit_error}",
                     "content_id": content_id
                 }
-        
+
         return {
             "success": True,
             "content_id": content_id,
@@ -1719,7 +1726,7 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
             "message": f"Successfully published {len(published_items)} item(s)",
             "published_by": acting_user.username
         }
-        
+
     except Exception as e:
         logger.exception(f"Error in publish_content_logic: {e}")
         return {
@@ -1734,27 +1741,28 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
 def delete_xblock_logic(block_id, acting_user):
     """
     Delete an xblock component from OpenEdX course structure using modulestore.
-    
+
     This function uses the OpenEdX modulestore to safely delete xblock components
     and automatically handles course republishing.
-    
+
     Args:
         block_id (str): Complete xblock usage key (e.g: block-v1:Org+Course+Run+type@html+block@id)
         acting_user: User performing the deletion
-        
+
     Returns:
         dict: Success/error response with details
     """
-    from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import UsageKey, CourseKey
-    from xmodule.modulestore.django import modulestore
-    from cms.djangoapps.contentstore.utils import get_course_and_check_access
-    from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
     import logging
-    
+
+    from cms.djangoapps.contentstore.utils import get_course_and_check_access
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey, UsageKey
+    from openedx.core.djangoapps.content.course_overviews.models import CourseOverview
+    from xmodule.modulestore.django import modulestore
+
     logger = logging.getLogger(__name__)
     User = get_user_model()
-    
+
     # Validate user
     if isinstance(acting_user, str):
         try:
@@ -1766,7 +1774,7 @@ def delete_xblock_logic(block_id, acting_user):
                 "message": f"User not found: {acting_user}",
                 "block_id": block_id
             }
-    
+
     # Parse usage key
     try:
         usage_key = UsageKey.from_string(block_id)
@@ -1779,7 +1787,7 @@ def delete_xblock_logic(block_id, acting_user):
             "message": f"Invalid block ID format: {parse_error}",
             "block_id": block_id
         }
-    
+
     # Get course and check access
     try:
         course = get_course_and_check_access(course_key, acting_user)
@@ -1791,10 +1799,10 @@ def delete_xblock_logic(block_id, acting_user):
             "block_id": block_id,
             "user": acting_user.username
         }
-    
+
     # Get modulestore
     store = modulestore()
-    
+
     # Check if xblock exists
     try:
         xblock = store.get_item(usage_key)
@@ -1805,7 +1813,7 @@ def delete_xblock_logic(block_id, acting_user):
                 "message": f"XBlock not found: {block_id}",
                 "block_id": block_id
             }
-        
+
         # Get parent to remove child reference
         parent_usage_key = store.get_parent_location(usage_key)
         if parent_usage_key:
@@ -1818,7 +1826,7 @@ def delete_xblock_logic(block_id, acting_user):
                 "message": f"Cannot delete xblock without parent: {block_id}",
                 "block_id": block_id
             }
-            
+
     except Exception as get_error:
         return {
             "success": False,
@@ -1826,7 +1834,7 @@ def delete_xblock_logic(block_id, acting_user):
             "message": f"Error retrieving xblock: {get_error}",
             "block_id": block_id
         }
-    
+
     # Perform deletion
     try:
         # Remove child from parent's children list
@@ -1834,11 +1842,11 @@ def delete_xblock_logic(block_id, acting_user):
             parent.children.remove(usage_key)
             store.update_item(parent, acting_user.id)
             logger.info(f"Removed {usage_key} from parent children list")
-        
+
         # Delete the xblock itself
         store.delete_item(usage_key, acting_user.id)
         logger.info(f"Successfully deleted xblock: {usage_key}")
-        
+
         # Trigger course republishing
         try:
             # Update course overview to trigger republishing
@@ -1846,7 +1854,7 @@ def delete_xblock_logic(block_id, acting_user):
             logger.info(f"Triggered course republishing for: {course_key}")
         except Exception as republish_error:
             logger.warning(f"Could not trigger republishing: {republish_error}")
-        
+
         return {
             "success": True,
             "message": f"Successfully deleted xblock: {block_id}",
@@ -1856,7 +1864,7 @@ def delete_xblock_logic(block_id, acting_user):
             "course_id": str(course_key),
             "parent_id": str(parent_usage_key) if parent_usage_key else None
         }
-        
+
     except Exception as delete_error:
         logger.exception(f"Error deleting xblock {usage_key}")
         return {
