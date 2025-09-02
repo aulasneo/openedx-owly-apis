@@ -267,7 +267,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
         return Response(result)
-        
+
     @action(
         detail=False,
         methods=['post'],
@@ -282,6 +282,6 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         data = request.data
         result = delete_xblock_logic(
             block_id=data.get('block_id'),
-            user_identifier=request.user.id
+            acting_user=request.user
         )
         return Response(result)
