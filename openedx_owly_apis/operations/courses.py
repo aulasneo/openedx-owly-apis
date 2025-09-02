@@ -1451,12 +1451,36 @@ def _generate_problem_xml(problem_type: str, problem_data: dict, display_name: s
 def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for multiple choice problems"""
 
+    # Ensure display_name is a valid string
+    display_name = str(display_name) if display_name is not None else "New Multiple Choice Problem"
+
     question_text = problem_data.get('question_text', 'Enter your question here')
+    question_text = str(question_text) if question_text is not None else 'Enter your question here'
+
     choices = problem_data.get('choices', [
         {'text': 'Option A', 'correct': True},
         {'text': 'Option B', 'correct': False},
         {'text': 'Option C', 'correct': False}
     ])
+
+    # Ensure we have valid choices
+    if not choices or not isinstance(choices, list):
+        choices = [
+            {'text': 'Option A', 'correct': True},
+            {'text': 'Option B', 'correct': False},
+            {'text': 'Option C', 'correct': False}
+        ]
+
+    # Escape XML special characters
+    def escape_xml(text):
+        if text is None:
+            return ''
+        text = str(text)
+        return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    .replace('"', '&quot;').replace("'", '&apos;'))
+
+    display_name = escape_xml(display_name)
+    question_text = escape_xml(question_text)
 
     xml = f'''<problem display_name="{display_name}">
     <multiplechoiceresponse>
@@ -1464,8 +1488,19 @@ def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
         <choicegroup type="MultipleChoice">'''
 
     for choice in choices:
-        correct = 'correct="true"' if choice.get('correct', False) else ''
-        xml += f'\n            <choice {correct}>{choice.get("text", "")}</choice>'
+        if isinstance(choice, dict):
+            choice_text = escape_xml(choice.get('text', ''))
+            correct = 'correct="true"' if choice.get('correct', False) else ''
+            xml += f'\n            <choice {correct}>{choice_text}</choice>'
+        elif isinstance(choice, str):
+            # Handle string choices (assume first one is correct by default)
+            choice_text = escape_xml(choice)
+            correct = 'correct="true"' if choices.index(choice) == 0 else ''
+            xml += f'\n            <choice {correct}>{choice_text}</choice>'
+        else:
+            # Handle any other type by converting to string
+            choice_text = escape_xml(str(choice))
+            xml += f'\n            <choice>{choice_text}</choice>'
 
     xml += '''
         </choicegroup>
@@ -1513,14 +1548,38 @@ def _generate_string_response_xml(problem_data: dict, display_name: str) -> str:
 
 
 def _generate_choice_response_xml(problem_data: dict, display_name: str) -> str:
-    """Generate XML for choice response problems (checkboxes)"""
+    """Generate XML for choice response problems (checkboxes/multi-select)"""
+
+    # Ensure display_name is a valid string
+    display_name = str(display_name) if display_name is not None else "New Multi-Select Problem"
 
     question_text = problem_data.get('question_text', 'Select all correct options')
+    question_text = str(question_text) if question_text is not None else 'Select all correct options'
+
     choices = problem_data.get('choices', [
         {'text': 'Option A', 'correct': True},
         {'text': 'Option B', 'correct': False},
         {'text': 'Option C', 'correct': True}
     ])
+
+    # Ensure we have valid choices
+    if not choices or not isinstance(choices, list):
+        choices = [
+            {'text': 'Option A', 'correct': True},
+            {'text': 'Option B', 'correct': False},
+            {'text': 'Option C', 'correct': True}
+        ]
+
+    # Escape XML special characters
+    def escape_xml(text):
+        if text is None:
+            return ''
+        text = str(text)
+        return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    .replace('"', '&quot;').replace("'", '&apos;'))
+
+    display_name = escape_xml(display_name)
+    question_text = escape_xml(question_text)
 
     xml = f'''<problem display_name="{display_name}">
     <choiceresponse>
@@ -1528,8 +1587,19 @@ def _generate_choice_response_xml(problem_data: dict, display_name: str) -> str:
         <checkboxgroup>'''
 
     for choice in choices:
-        correct = 'correct="true"' if choice.get('correct', False) else 'correct="false"'
-        xml += f'\n            <choice {correct}>{choice.get("text", "")}</choice>'
+        if isinstance(choice, dict):
+            choice_text = escape_xml(choice.get('text', ''))
+            correct = 'correct="true"' if choice.get('correct', False) else 'correct="false"'
+            xml += f'\n            <choice {correct}>{choice_text}</choice>'
+        elif isinstance(choice, str):
+            # Handle string choices (assume first one is correct by default)
+            choice_text = escape_xml(choice)
+            correct = 'correct="true"' if choices.index(choice) == 0 else 'correct="false"'
+            xml += f'\n            <choice {correct}>{choice_text}</choice>'
+        else:
+            # Handle any other type by converting to string
+            choice_text = escape_xml(str(choice))
+            xml += f'\n            <choice correct="false">{choice_text}</choice>'
 
     xml += '''
         </checkboxgroup>
@@ -1555,22 +1625,51 @@ def _generate_generic_problem_xml(problem_data: dict, display_name: str) -> str:
 def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for dropdown problems (optionresponse)"""
 
+    # Ensure display_name is a valid string
+    display_name = str(display_name) if display_name is not None else "New Dropdown Problem"
+
     question_text = problem_data.get('question_text', 'Select the correct option')
+    # Ensure question_text is a valid string
+    question_text = str(question_text) if question_text is not None else 'Select the correct option'
+
     choices = problem_data.get('choices', [
         {'text': 'Option A', 'correct': True},
         {'text': 'Option B', 'correct': False},
         {'text': 'Option C', 'correct': False}
     ])
 
-    # Find the correct answer
+    # Ensure we have valid choices
+    if not choices or not isinstance(choices, list):
+        choices = [
+            {'text': 'Option A', 'correct': True},
+            {'text': 'Option B', 'correct': False},
+            {'text': 'Option C', 'correct': False}
+        ]
+
+    # Find the correct answer and ensure all choice texts are strings
     correct_answer = None
     for choice in choices:
-        if choice.get('correct', False):
-            correct_answer = choice.get('text', '')
-            break
+        if isinstance(choice, dict):
+            # Ensure choice text is a valid string
+            choice_text = choice.get('text', '')
+            choice['text'] = str(choice_text) if choice_text is not None else ''
+
+            if choice.get('correct', False):
+                correct_answer = choice['text']
 
     if not correct_answer:
         correct_answer = choices[0].get('text', 'Option A') if choices else 'Option A'
+
+    # Escape XML special characters to prevent malformed XML
+    def escape_xml(text):
+        if text is None:
+            return ''
+        text = str(text)
+        return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    .replace('"', '&quot;').replace("'", '&apos;'))
+
+    display_name = escape_xml(display_name)
+    question_text = escape_xml(question_text)
 
     xml = f'''<problem display_name="{display_name}">
     <optionresponse>
@@ -1579,8 +1678,19 @@ def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
 
     # Add options to dropdown
     for choice in choices:
-        correct_attr = ' correct="True"' if choice.get('correct', False) else ''
-        xml += f'\n            <option{correct_attr}>{choice.get("text", "")}</option>'
+        if isinstance(choice, dict):
+            choice_text = escape_xml(choice.get('text', ''))
+            correct_attr = ' correct="True"' if choice.get('correct', False) else ''
+            xml += f'\n            <option{correct_attr}>{choice_text}</option>'
+        elif isinstance(choice, str):
+            # Handle string choices (assume first one is correct by default)
+            choice_text = escape_xml(choice)
+            correct_attr = ' correct="True"' if choices.index(choice) == 0 else ''
+            xml += f'\n            <option{correct_attr}>{choice_text}</option>'
+        else:
+            # Handle any other type by converting to string
+            choice_text = escape_xml(str(choice))
+            xml += f'\n            <option>{choice_text}</option>'
 
     xml += '''
         </optioninput>
@@ -1770,7 +1880,7 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
 def delete_xblock_logic(block_id, user_identifier=None):
     """
     Delete an xblock component from OpenEdX course structure using modulestore.
-    
+
     Based on OpenEdX's official delete_item implementation in split.py.
 
     Args:
@@ -1795,11 +1905,11 @@ def delete_xblock_logic(block_id, user_identifier=None):
         logger.error(f"No acting user found for identifier: {user_identifier}")
         return {
             "success": False,
-            "error": "user_not_found", 
+            "error": "user_not_found",
             "message": f"No acting user available for identifier: {user_identifier}",
             "block_id": block_id
         }
-    
+
     logger.info(f"delete_xblock_logic called with block_id={block_id}, user={acting_user.username}")
 
     # Parse usage key
@@ -1819,7 +1929,7 @@ def delete_xblock_logic(block_id, user_identifier=None):
     # Get modulestore and use the official delete_item method
     try:
         store = modulestore()
-        
+
         # Check if xblock exists first
         try:
             xblock = store.get_item(usage_key)
@@ -1835,7 +1945,7 @@ def delete_xblock_logic(block_id, user_identifier=None):
         # Use the official OpenEdX delete_item method
         # This handles all the complexity: parent updates, structure versioning, etc.
         result_course_key = store.delete_item(usage_key, acting_user.id)
-        
+
         logger.info(f"Successfully deleted xblock: {usage_key}")
         logger.info(f"New course version: {result_course_key}")
 
