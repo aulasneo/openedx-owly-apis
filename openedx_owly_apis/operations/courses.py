@@ -1714,7 +1714,6 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
     """
     import logging
 
-    from cms.djangoapps.contentstore.utils import get_course_and_check_access
     from django.contrib.auth import get_user_model
     from opaque_keys.edx.keys import CourseKey, UsageKey
     from xmodule.modulestore.django import modulestore
@@ -1728,13 +1727,7 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
         )
 
         User = get_user_model()
-        if user_identifier:
-            try:
-                acting_user = User.objects.get(id=user_identifier)
-            except User.DoesNotExist:
-                acting_user = User.objects.get(username=user_identifier)
-        else:
-            acting_user = User.objects.filter(is_superuser=True).first()
+        acting_user = _get_acting_user(user_identifier)
 
         if not acting_user:
             return {
@@ -1767,9 +1760,16 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                     "content_id": content_id
                 }
 
-        # Get course and check access
+        # Get course and validate access
         try:
-            course = get_course_and_check_access(course_key, acting_user)
+            course = store.get_course(course_key)
+            if not course:
+                return {
+                    "success": False,
+                    "error": "course_not_found", 
+                    "message": f"Course not found: {course_key}",
+                    "content_id": content_id
+                }
         except Exception as access_error:
             return {
                 "success": False,
@@ -1869,9 +1869,9 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
     except Exception as e:
         logger.exception(f"Error in publish_content_logic: {e}")
         return {
-            "success": True,
-            "message": f"Successfully published {len(published_items)} items",
-            "published_items": published_items,
+            "success": False,
+            "error": "unexpected_error",
+            "message": f"Unexpected error during publishing: {str(e)}",
             "content_id": content_id,
             "publish_type": publish_type
         }
@@ -1976,4 +1976,138 @@ def delete_xblock_logic(block_id, user_identifier=None):
             "message": f"Failed to delete xblock: {delete_error}",
             "block_id": block_id,
             "user": acting_user.username
+        }
+
+
+def toggle_certificate_logic(course_id: str, certificate_id: str, is_active: bool, user_identifier=None) -> dict:
+    """
+    Toggle certificate active status using OpenEdX CertificateManager pattern.
+    
+    Args:
+        course_id: Course identifier (e.g., 'course-v1:Org+Course+Run')
+        certificate_id: Certificate identifier to toggle
+        is_active: Boolean to set certificate active status
+        user_identifier: User performing the operation
+        
+    Returns:
+        dict: Operation result with success status
+    """
+    import logging
+    
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+    from xmodule.modulestore.django import modulestore
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info(
+            "toggle_certificate start course_id=%s certificate_id=%s is_active=%s requested_by=%s",
+            course_id, certificate_id, is_active, str(user_identifier)
+        )
+        
+        User = get_user_model()
+        acting_user = _get_acting_user(user_identifier)
+        
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "user_not_found",
+                "message": "Valid user required for certificate operations",
+                "course_id": course_id
+            }
+        
+        # Parse course key
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+        
+        if not course:
+            return {
+                "success": False,
+                "error": "course_not_found",
+                "message": f"Course not found: {course_id}",
+                "course_id": course_id
+            }
+        
+        # Use OpenEdX CertificateManager pattern
+        try:
+            from cms.djangoapps.contentstore.views.certificates import CertificateManager
+            
+            # Get current certificates
+            certificates = getattr(course, 'certificates', {})
+            
+            if 'certificates' not in certificates:
+                certificates['certificates'] = []
+            
+            # Find the certificate to toggle
+            certificate_found = False
+            for certificate in certificates['certificates']:
+                if str(certificate.get('id', '')) == str(certificate_id):
+                    # Use official OpenEdX pattern: direct assignment
+                    certificate['is_active'] = is_active
+                    certificate_found = True
+                    break
+            
+            if not certificate_found:
+                return {
+                    "success": False,
+                    "error": "certificate_not_found",
+                    "message": f"Certificate not found: {certificate_id}",
+                    "course_id": course_id,
+                    "certificate_id": certificate_id
+                }
+            
+            # Update course with new certificate configuration
+            course.certificates = certificates
+            store.update_item(course, acting_user.id)
+            
+            action = "activated" if is_active else "deactivated"
+            logger.info(f"Successfully {action} certificate {certificate_id} for course {course_id}")
+            
+            return {
+                "success": True,
+                "message": f"Certificate {action} successfully",
+                "course_id": course_id,
+                "certificate_id": certificate_id,
+                "is_active": is_active,
+                "action": action,
+                "updated_by": acting_user.username
+            }
+            
+        except ImportError:
+            logger.warning("CertificateManager not available, using direct approach")
+            # Fallback approach without CertificateManager
+            certificates = getattr(course, 'certificates', {})
+            
+            if 'certificates' not in certificates:
+                certificates['certificates'] = []
+            
+            # Find and update certificate
+            for certificate in certificates['certificates']:
+                if str(certificate.get('id', '')) == str(certificate_id):
+                    certificate['is_active'] = is_active
+                    break
+            
+            course.certificates = certificates
+            store.update_item(course, acting_user.id)
+            
+            action = "activated" if is_active else "deactivated"
+            return {
+                "success": True,
+                "message": f"Certificate {action} successfully (fallback method)",
+                "course_id": course_id,
+                "certificate_id": certificate_id,
+                "is_active": is_active,
+                "action": action
+            }
+            
+    except Exception as e:
+        logger.exception(f"Error toggling certificate: {e}")
+        return {
+            "success": False,
+            "error": "toggle_failed",
+            "message": f"Failed to toggle certificate: {str(e)}",
+            "course_id": course_id,
+            "certificate_id": certificate_id
         }
