@@ -148,6 +148,25 @@ class TestOpenedXCourseViewSet:
         assert resp.status_code == 200
         assert resp.data["called"] == "enable_configure_certificates_logic"
 
+    @pytest.mark.skip(reason="toggle_certificate_logic requires full OpenedX environment")
+    def test_toggle_certificate_calls_logic(self, api_factory):
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "configure_certificates"})
+        req = api_factory.post(
+            "/owly-courses/certificates/configure/",
+            {
+                "course_id": "course-v1:ORG+NUM+RUN",
+                "certificate_id": "cert123",
+                "is_active": True
+            },
+            format="json",
+        )
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "toggle_certificate_logic"
+
     def test_control_unit_availability_calls_logic(self, api_factory):
         from openedx_owly_apis.views.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "control_unit_availability"})

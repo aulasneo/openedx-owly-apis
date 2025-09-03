@@ -208,13 +208,31 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
     )
     def configure_certificates(self, request):
-        """Configure certificates for a course"""
+        """
+        Configure certificates for a course
+        Also handles certificate activation/deactivation when is_active is provided
+        """
         data = request.data
-        result = enable_configure_certificates_logic(
-            course_id=data.get('course_id'),
-            certificate_config=data.get('certificate_config', {}),
-            user_identifier=request.user.id
-        )
+
+        # Check if this is a simple activation/deactivation request
+        if 'is_active' in data and 'certificate_id' in data:
+            # Use toggle_certificate_logic for activation/deactivation
+            # pylint: disable=import-outside-toplevel
+            from openedx_owly_apis.operations.courses import toggle_certificate_logic
+            result = toggle_certificate_logic(
+                course_id=data.get('course_id'),
+                certificate_id=data.get('certificate_id'),
+                is_active=data.get('is_active', True),
+                user_identifier=request.user.id
+            )
+        else:
+            # Use the standard certificate configuration logic
+            result = enable_configure_certificates_logic(
+                course_id=data.get('course_id'),
+                certificate_config=data.get('certificate_config', {}),
+                user_identifier=request.user.id
+            )
+
         return Response(result)
 
     @action(
