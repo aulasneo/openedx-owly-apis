@@ -1452,6 +1452,10 @@ def _generate_problem_xml(problem_type: str, problem_data: dict, display_name: s
 def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for multiple choice problems"""
 
+    # Ensure all inputs are properly validated and not None
+    if problem_data is None:
+        problem_data = {}
+
     # Ensure display_name is a valid string
     display_name = str(display_name) if display_name is not None else "New Multiple Choice Problem"
 
@@ -1472,7 +1476,7 @@ def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
             {'text': 'Option C', 'correct': False}
         ]
 
-    # Escape XML special characters
+    # Escape XML special characters - robust handling of None values
     def escape_xml(text):
         if text is None:
             return ''
@@ -1490,18 +1494,25 @@ def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
 
     for choice in choices:
         if isinstance(choice, dict):
-            choice_text = escape_xml(choice.get('text', ''))
-            correct = 'correct="true"' if choice.get('correct', False) else ''
+            # Ensure choice text is not None before processing
+            choice_text = choice.get('text', '')
+            if choice_text is None:
+                choice_text = ''
+            choice_text = escape_xml(str(choice_text))
+            # ALWAYS include correct attribute - OpenedX requires it on ALL choices
+            correct = 'correct="true"' if choice.get('correct', False) else 'correct="false"'
             xml += f'\n            <choice {correct}>{choice_text}</choice>'
         elif isinstance(choice, str):
             # Handle string choices (assume first one is correct by default)
-            choice_text = escape_xml(choice)
-            correct = 'correct="true"' if choices.index(choice) == 0 else ''
+            choice_text = escape_xml(str(choice) if choice is not None else '')
+            # ALWAYS include correct attribute - OpenedX requires it on ALL choices
+            correct = 'correct="true"' if choices.index(choice) == 0 else 'correct="false"'
             xml += f'\n            <choice {correct}>{choice_text}</choice>'
         else:
             # Handle any other type by converting to string
-            choice_text = escape_xml(str(choice))
-            xml += f'\n            <choice>{choice_text}</choice>'
+            choice_text = escape_xml(str(choice) if choice is not None else '')
+            # ALWAYS include correct attribute - OpenedX requires it on ALL choices
+            xml += f'\n            <choice correct="false">{choice_text}</choice>'
 
     xml += '''
         </choicegroup>
@@ -1514,9 +1525,34 @@ def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
 def _generate_numerical_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for numerical response problems"""
 
+    # Ensure all inputs are properly validated and not None
+    if problem_data is None:
+        problem_data = {}
+
+    # Ensure display_name is a valid string
+    display_name = str(display_name) if display_name is not None else "New Numerical Problem"
+
     question_text = problem_data.get('question_text', 'Enter your numerical question here')
+    question_text = str(question_text) if question_text is not None else 'Enter your numerical question here'
+
     correct_answer = problem_data.get('correct_answer', '42')
+    correct_answer = str(correct_answer) if correct_answer is not None else '42'
+
     tolerance = problem_data.get('tolerance', '0.01')
+    tolerance = str(tolerance) if tolerance is not None else '0.01'
+    # Escape XML special characters
+
+    def escape_xml(text):
+        if text is None:
+            return ''
+        text = str(text)
+        return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    .replace('"', '&quot;').replace("'", '&apos;'))
+
+    display_name = escape_xml(display_name)
+    question_text = escape_xml(question_text)
+    correct_answer = escape_xml(correct_answer)
+    tolerance = escape_xml(tolerance)
 
     xml = f'''<problem display_name="{display_name}">
     <numericalresponse answer="{correct_answer}">
@@ -1532,9 +1568,31 @@ def _generate_numerical_xml(problem_data: dict, display_name: str) -> str:
 def _generate_string_response_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for string response problems"""
 
+    # Ensure all inputs are properly validated and not None
+    if problem_data is None:
+        problem_data = {}
+
+    # Ensure display_name is a valid string
+    display_name = str(display_name) if display_name is not None else "New Text Problem"
+
     question_text = problem_data.get('question_text', 'Enter your text question here')
+    question_text = str(question_text) if question_text is not None else 'Enter your text question here'
     correct_answer = problem_data.get('correct_answer', 'correct answer')
+    correct_answer = str(correct_answer) if correct_answer is not None else 'correct answer'
+
     case_sensitive = problem_data.get('case_sensitive', False)
+
+    # Escape XML special characters
+    def escape_xml(text):
+        if text is None:
+            return ''
+        text = str(text)
+        return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    .replace('"', '&quot;').replace("'", '&apos;'))
+
+    display_name = escape_xml(display_name)
+    question_text = escape_xml(question_text)
+    correct_answer = escape_xml(correct_answer)
 
     type_attr = 'type="ci"' if not case_sensitive else ''
 
@@ -1550,6 +1608,10 @@ def _generate_string_response_xml(problem_data: dict, display_name: str) -> str:
 
 def _generate_choice_response_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for choice response problems (checkboxes/multi-select)"""
+
+    # Ensure all inputs are properly validated and not None
+    if problem_data is None:
+        problem_data = {}
 
     # Ensure display_name is a valid string
     display_name = str(display_name) if display_name is not None else "New Multi-Select Problem"
@@ -1589,17 +1651,21 @@ def _generate_choice_response_xml(problem_data: dict, display_name: str) -> str:
 
     for choice in choices:
         if isinstance(choice, dict):
-            choice_text = escape_xml(choice.get('text', ''))
+            # Ensure choice text is not None before processing
+            choice_text = choice.get('text', '')
+            if choice_text is None:
+                choice_text = ''
+            choice_text = escape_xml(str(choice_text))
             correct = 'correct="true"' if choice.get('correct', False) else 'correct="false"'
             xml += f'\n            <choice {correct}>{choice_text}</choice>'
         elif isinstance(choice, str):
             # Handle string choices (assume first one is correct by default)
-            choice_text = escape_xml(choice)
+            choice_text = escape_xml(str(choice) if choice is not None else '')
             correct = 'correct="true"' if choices.index(choice) == 0 else 'correct="false"'
             xml += f'\n            <choice {correct}>{choice_text}</choice>'
         else:
             # Handle any other type by converting to string
-            choice_text = escape_xml(str(choice))
+            choice_text = escape_xml(str(choice) if choice is not None else '')
             xml += f'\n            <choice correct="false">{choice_text}</choice>'
 
     xml += '''
@@ -1613,7 +1679,25 @@ def _generate_choice_response_xml(problem_data: dict, display_name: str) -> str:
 def _generate_generic_problem_xml(problem_data: dict, display_name: str) -> str:
     """Generate generic problem XML"""
 
+    # Ensure all inputs are properly validated and not None
+    if problem_data is None:
+        problem_data = {}
+    # Ensure display_name is a valid string
+    display_name = str(display_name) if display_name is not None else "New Generic Problem"
+
     question_text = problem_data.get('question_text', 'Enter your question here')
+    question_text = str(question_text) if question_text is not None else 'Enter your question here'
+
+    # Escape XML special characters
+    def escape_xml(text):
+        if text is None:
+            return ''
+        text = str(text)
+        return (text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    .replace('"', '&quot;').replace("'", '&apos;'))
+
+    display_name = escape_xml(display_name)
+    question_text = escape_xml(question_text)
 
     xml = f'''<problem display_name="{display_name}">
     <p>{question_text}</p>
@@ -1625,6 +1709,10 @@ def _generate_generic_problem_xml(problem_data: dict, display_name: str) -> str:
 
 def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
     """Generate XML for dropdown problems (optionresponse)"""
+
+    # Ensure all inputs are properly validated and not None
+    if problem_data is None:
+        problem_data = {}
 
     # Ensure display_name is a valid string
     display_name = str(display_name) if display_name is not None else "New Dropdown Problem"
@@ -1680,18 +1768,25 @@ def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
     # Add options to dropdown
     for choice in choices:
         if isinstance(choice, dict):
-            choice_text = escape_xml(choice.get('text', ''))
-            correct_attr = ' correct="True"' if choice.get('correct', False) else ''
+            # Ensure choice text is not None before processing
+            choice_text = choice.get('text', '')
+            if choice_text is None:
+                choice_text = ''
+            choice_text = escape_xml(str(choice_text))
+            # ALWAYS include correct attribute - OpenedX requires it on ALL options
+            correct_attr = ' correct="True"' if choice.get('correct', False) else ' correct="False"'
             xml += f'\n            <option{correct_attr}>{choice_text}</option>'
         elif isinstance(choice, str):
             # Handle string choices (assume first one is correct by default)
-            choice_text = escape_xml(choice)
-            correct_attr = ' correct="True"' if choices.index(choice) == 0 else ''
+            choice_text = escape_xml(str(choice) if choice is not None else '')
+            # ALWAYS include correct attribute - OpenedX requires it on ALL options
+            correct_attr = ' correct="True"' if choices.index(choice) == 0 else ' correct="False"'
             xml += f'\n            <option{correct_attr}>{choice_text}</option>'
         else:
             # Handle any other type by converting to string
-            choice_text = escape_xml(str(choice))
-            xml += f'\n            <option>{choice_text}</option>'
+            choice_text = escape_xml(str(choice) if choice is not None else '')
+            # ALWAYS include correct attribute - OpenedX requires it on ALL options
+            xml += f'\n            <option correct="False">{choice_text}</option>'
 
     xml += '''
         </optioninput>
@@ -1704,6 +1799,7 @@ def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
 def publish_content_logic(content_id: str, publish_type: str = "auto", user_identifier=None) -> dict:
     """
     Publish course content (courses, units, subsections, sections) in OpenEdX.
+    Uses a robust approach that handles missing items gracefully.
 
     Args:
         content_id: OpenEdX content ID (course key or usage key format)
@@ -1718,6 +1814,7 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
     from django.contrib.auth import get_user_model
     from opaque_keys.edx.keys import CourseKey, UsageKey
     from xmodule.modulestore.django import modulestore
+    from xmodule.modulestore.exceptions import ItemNotFoundError
 
     logger = logging.getLogger(__name__)
 
@@ -1739,6 +1836,7 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
             }
 
         store = modulestore()
+        published_items = []
 
         # Determine if this is a course or unit/component
         try:
@@ -1746,7 +1844,7 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
             course_key = CourseKey.from_string(content_id)
             is_course = True
             logger.info(f"Detected course key: {course_key}")
-        except Exception:  # noqa: BLE001 - broad on purpose to detect format
+        except Exception:
             try:
                 # Try parsing as UsageKey
                 usage_key = UsageKey.from_string(content_id)
@@ -1780,23 +1878,41 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                 "user": acting_user.username
             }
 
-        published_items = []
-
         if is_course or publish_type == "course":
-            # Publish entire course
+            # Publish entire course by publishing all its children recursively
             try:
-                # Mark course as published
-                if hasattr(course, 'course_visibility'):
-                    course.course_visibility = 'public'
-                    store.update_item(course, acting_user.id)
+                def publish_recursively(item, level=0):
+                    """Recursively publish an item and all its children"""
+                    published = []
+                    item_usage_key = item.location
 
-                published_items.append({
-                    "type": "course",
-                    "id": str(course_key),
-                    "display_name": course.display_name
-                })
+                    try:
+                        store.publish(item_usage_key, acting_user.id)
+                        published.append({
+                            "type": getattr(item, 'category', 'unknown'),
+                            "id": str(item_usage_key),
+                            "display_name": getattr(item, 'display_name', 'Unnamed'),
+                            "level": level
+                        })
+                        logger.info(f"Published {item.category}: {item.display_name}")
+                    except Exception as pub_error:
+                        logger.warning(f"Failed to publish {item_usage_key}: {pub_error}")
 
-                logger.info(f"Successfully published course: {course_key}")
+                    # Recursively publish children
+                    if hasattr(item, 'children'):
+                        for child_key in item.children:
+                            try:
+                                child_item = store.get_item(child_key)
+                                published.extend(publish_recursively(child_item, level + 1))
+                            except Exception as child_error:
+                                logger.warning(f"Failed to get/publish child {child_key}: {child_error}")
+
+                    return published
+
+                # Start recursive publishing from course
+                published_items = publish_recursively(course)
+
+                logger.info(f"Successfully published course and {len(published_items)} items")
 
             except Exception as course_error:
                 logger.exception(f"Error publishing course: {course_error}")
@@ -1807,49 +1923,81 @@ def publish_content_logic(content_id: str, publish_type: str = "auto", user_iden
                     "content_id": content_id
                 }
         else:
-            # Publish specific unit/component
+            # Publish specific unit/component using direct approach
             try:
                 usage_key = UsageKey.from_string(content_id)
-                xblock = store.get_item(usage_key)
+                # Direct publish approach - don't try to get the item first
+                try:
+                    store.publish(usage_key, acting_user.id)
+                    logger.info(f"Successfully published via direct method: {usage_key}")
 
-                if not xblock:
+                    # Try to get details after publishing
+                    try:
+                        published_item = store.get_item(usage_key)
+                        display_name = getattr(published_item, 'display_name', 'Published Item')
+                        category = getattr(published_item, 'category', 'unknown')
+                        children = getattr(published_item, 'children', [])
+                    except Exception:
+                        # Use fallback values if we can't get the item
+                        display_name = 'Published Item'
+                        category = usage_key.block_type if hasattr(usage_key, 'block_type') else 'unknown'
+                        children = []
+
+                    published_items.append({
+                        "type": category,
+                        "id": str(usage_key),
+                        "display_name": display_name
+                    })
+
+                    # If auto mode and this is a container, publish children
+                    if publish_type == "auto" and category in ['sequential', 'chapter'] and children:
+                        logger.info(f"Auto-publishing {len(children)} children of {category}")
+                        children_published = []
+                        for child_key in children:
+                            try:
+                                store.publish(child_key, acting_user.id)
+                                logger.info(f"Published child: {child_key}")
+
+                                # Try to get child details
+                                try:
+                                    child_item = store.get_item(child_key)
+                                    child_display_name = getattr(child_item, 'display_name', 'Published Child')
+                                    child_category = getattr(child_item, 'category', 'unknown')
+                                except Exception:
+                                    child_display_name = 'Published Child'
+                                    child_category = (child_key.block_type
+                                                      if hasattr(child_key, 'block_type')
+                                                      else 'unknown')
+
+                                children_published.append({
+                                    "type": child_category,
+                                    "id": str(child_key),
+                                    "display_name": child_display_name
+                                })
+                            except Exception as child_error:
+                                logger.warning(f"Failed to publish child {child_key}: {child_error}")
+
+                        published_items.extend(children_published)
+
+                except Exception as publish_error:
+                    logger.error(f"Failed to publish {usage_key}: {publish_error}")
+
+                    # If direct publish fails, it might be because the item doesn't exist
+                    # or there's a permission issue
                     return {
                         "success": False,
-                        "error": "content_not_found",
-                        "message": f"Content not found: {usage_key}",
-                        "content_id": content_id
+                        "error": "publish_failed",
+                        "message": (
+                            f"Failed to publish content. This might be because the content doesn't exist "
+                            f"in the draft store or has been deleted. Error: {publish_error}"
+                        ),
+                        "content_id": content_id,
+                        "details": str(publish_error),
+                        "suggestion": "Check if the content exists and try publishing parent container instead"
                     }
 
-                # Publish the xblock
-                store.publish(usage_key, acting_user.id)
-
-                published_items.append({
-                    "type": xblock.category,
-                    "id": str(usage_key),
-                    "display_name": getattr(xblock, 'display_name', 'Unnamed')
-                })
-
-                # If this is a sequential or chapter, also publish children
-                if publish_type == "auto" and xblock.category in ['sequential', 'chapter']:
-                    children_published = []
-                    for child_usage_key in xblock.children:
-                        try:
-                            store.publish(child_usage_key, acting_user.id)
-                            child_xblock = store.get_item(child_usage_key)
-                            children_published.append({
-                                "type": child_xblock.category,
-                                "id": str(child_usage_key),
-                                "display_name": getattr(child_xblock, 'display_name', 'Unnamed')
-                            })
-                        except Exception as child_error:
-                            logger.warning(f"Failed to publish child {child_usage_key}: {child_error}")
-
-                    published_items.extend(children_published)
-
-                logger.info(f"Successfully published content: {usage_key}")
-
             except Exception as unit_error:
-                logger.exception(f"Error publishing unit: {unit_error}")
+                logger.exception(f"Error in publish workflow: {unit_error}")
                 return {
                     "success": False,
                     "error": "unit_publish_failed",
