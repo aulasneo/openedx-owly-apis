@@ -2256,3 +2256,142 @@ def toggle_certificate_logic(course_id: str, certificate_id: str, is_active: boo
             "course_id": course_id,
             "certificate_id": certificate_id
         }
+
+
+def toggle_certificate_simple_logic(course_id: str, is_active: bool, user_identifier=None):
+    """
+    Toggle certificate active status following official OpenedX pattern (without certificate_id).
+
+    This follows the exact pattern from cms/djangoapps/contentstore/views/certificates.py
+    certificate_activation_handler - activates/deactivates the first certificate found.
+
+    Args:
+        course_id: Course identifier (e.g., 'course-v1:Org+Course+Run')
+        is_active: Boolean to set certificate active status
+        user_identifier: User performing the operation
+
+    Returns:
+        dict: Operation result with success status
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+    from xmodule.modulestore.django import modulestore
+
+    try:
+        logger.info(
+            "toggle_certificate_simple start course_id=%s is_active=%s requested_by=%s",
+            course_id, is_active, str(user_identifier)
+        )
+
+        User = get_user_model()
+        acting_user = _get_acting_user(user_identifier)
+
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "user_not_found",
+                "message": "Valid user required for certificate operations",
+                "course_id": course_id
+            }
+
+        # Parse course key
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+
+        if not course:
+            return {
+                "success": False,
+                "error": "course_not_found",
+                "message": f"Course not found: {course_id}",
+                "course_id": course_id
+            }
+
+        # Use OpenedX CertificateManager pattern - exactly like official code
+        try:
+            from cms.djangoapps.contentstore.views.certificates import CertificateManager
+
+            # Get certificates using official CertificateManager
+            certificates = CertificateManager.get_certificates(course)
+
+            # Follow official OpenedX pattern: activate/deactivate first certificate
+            certificate_found = False
+            for certificate in certificates:
+                certificate['is_active'] = is_active
+                certificate_found = True
+                break  # Only modify the first certificate, just like official code
+
+            if not certificate_found:
+                return {
+                    "success": False,
+                    "error": "no_certificates_found",
+                    "message": f"No certificates found in course: {course_id}",
+                    "course_id": course_id
+                }
+
+            # Update course with new certificate configuration
+            store.update_item(course, acting_user.id)
+
+            # Track event like official OpenedX code
+            try:
+                cert_event_type = 'activated' if is_active else 'deactivated'
+                CertificateManager.track_event(cert_event_type, {
+                    'course_id': str(course.id),
+                })
+            except Exception as track_error:
+                logger.warning(f"Could not track certificate event: {track_error}")
+
+            action = "activated" if is_active else "deactivated"
+            logger.info(f"Successfully {action} first certificate for course {course_id}")
+
+            return {
+                "success": True,
+                "message": f"Certificate {action} successfully",
+                "course_id": course_id,
+                "is_active": is_active,
+                "action": action,
+                "method": "official_openedx_pattern",
+                "updated_by": acting_user.username
+            }
+
+        except ImportError:
+            logger.warning("CertificateManager not available, using direct approach")
+            # Fallback approach without CertificateManager
+            certificates = getattr(course, 'certificates', {})
+
+            if 'certificates' not in certificates:
+                certificates['certificates'] = []
+
+            if not certificates['certificates']:
+                return {
+                    "success": False,
+                    "error": "no_certificates_found",
+                    "message": f"No certificates found in course: {course_id}",
+                    "course_id": course_id
+                }
+
+            # Activate/deactivate first certificate
+            certificates['certificates'][0]['is_active'] = is_active
+
+            course.certificates = certificates
+            store.update_item(course, acting_user.id)
+
+            action = "activated" if is_active else "deactivated"
+            return {
+                "success": True,
+                "message": f"Certificate {action} successfully (fallback method)",
+                "course_id": course_id,
+                "is_active": is_active,
+                "action": action,
+                "method": "fallback_direct",
+                "updated_by": acting_user.username
+            }
+
+    except Exception as e:
+        logger.exception(f"Error toggling certificate: {e}")
+        return {
+            "success": False,
+            "error": "toggle_failed",
+            "message": f"Failed to toggle certificate: {str(e)}",
+            "course_id": course_id
+        }

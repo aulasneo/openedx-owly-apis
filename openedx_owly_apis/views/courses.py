@@ -215,16 +215,25 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         data = request.data
 
         # Check if this is a simple activation/deactivation request
-        if 'is_active' in data and 'certificate_id' in data:
-            # Use toggle_certificate_logic for activation/deactivation
+        if 'is_active' in data:
             # pylint: disable=import-outside-toplevel
-            from openedx_owly_apis.operations.courses import toggle_certificate_logic
-            result = toggle_certificate_logic(
-                course_id=data.get('course_id'),
-                certificate_id=data.get('certificate_id'),
-                is_active=data.get('is_active', True),
-                user_identifier=request.user.id
-            )
+            if 'certificate_id' in data:
+                # Use specific certificate ID (legacy method)
+                from openedx_owly_apis.operations.courses import toggle_certificate_logic
+                result = toggle_certificate_logic(
+                    course_id=data.get('course_id'),
+                    certificate_id=data.get('certificate_id'),
+                    is_active=data.get('is_active', True),
+                    user_identifier=request.user.id
+                )
+            else:
+                # Use official OpenedX pattern (no certificate_id needed)
+                from openedx_owly_apis.operations.courses import toggle_certificate_simple_logic
+                result = toggle_certificate_simple_logic(
+                    course_id=data.get('course_id'),
+                    is_active=data.get('is_active', True),
+                    user_identifier=request.user.id
+                )
         else:
             # Use the standard certificate configuration logic
             result = enable_configure_certificates_logic(
