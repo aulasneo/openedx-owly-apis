@@ -209,39 +209,27 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def configure_certificates(self, request):
         """
-        Configure certificates for a course
-        Also handles certificate activation/deactivation when is_active is provided
+        Configure certificates for a course.
+        For activation/deactivation, ONLY course_id and is_active are required (no certificate_id).
+        For configuration, use certificate_config.
         """
         data = request.data
-
-        # Check if this is a simple activation/deactivation request
+        # Activar/desactivar certificado (solo course_id + is_active)
         if 'is_active' in data:
             # pylint: disable=import-outside-toplevel
-            if 'certificate_id' in data:
-                # Use specific certificate ID (legacy method)
-                from openedx_owly_apis.operations.courses import toggle_certificate_logic
-                result = toggle_certificate_logic(
-                    course_id=data.get('course_id'),
-                    certificate_id=data.get('certificate_id'),
-                    is_active=data.get('is_active', True),
-                    user_identifier=request.user.id
-                )
-            else:
-                # Use official OpenedX pattern (no certificate_id needed)
-                from openedx_owly_apis.operations.courses import toggle_certificate_simple_logic
-                result = toggle_certificate_simple_logic(
-                    course_id=data.get('course_id'),
-                    is_active=data.get('is_active', True),
-                    user_identifier=request.user.id
-                )
+            from openedx_owly_apis.operations.courses import toggle_certificate_simple_logic
+            result = toggle_certificate_simple_logic(
+                course_id=data.get('course_id'),
+                is_active=data.get('is_active', True),
+                user_identifier=request.user.id
+            )
         else:
-            # Use the standard certificate configuration logic
+            # Configuración avanzada
             result = enable_configure_certificates_logic(
                 course_id=data.get('course_id'),
                 certificate_config=data.get('certificate_config', {}),
                 user_identifier=request.user.id
             )
-
         return Response(result)
 
     @action(
