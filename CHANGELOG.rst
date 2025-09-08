@@ -9,7 +9,40 @@ Change Log
 
    This project adheres to Semantic Versioning (https://semver.org/).
 
-.. There should always be an "Version 1.0.0 (2025-08-27)" section for changes pending release.
+.. There should always be an "Unreleased" section for changes pending release.
+
+Unreleased
+**********
+
+Added
+=====
+
+* Problem creation endpoints and logic for multiple problem types:
+  - Support for dropdown problems with XML generation
+  - Enhanced XML generation for multiple choice problems with input validation and escaping
+  - ``POST /add_problem_content`` endpoint for problem integration
+* Content publishing functionality:
+  - ``POST /publish`` endpoint for publishing courses and units
+  - Content publishing logic with modulestore integration
+* XBlock management capabilities:
+  - ``POST /delete_xblock`` endpoint for removing course components
+  - Delete XBlock logic with modulestore integration
+* Certificate management enhancements:
+  - Toggle certificate logic for managing certificate active status
+  - Certificate activation/deactivation integration in course configuration
+  - Simplified certificate activation logic without certificate_id requirement
+
+Changed
+=======
+
+* Enhanced XML generation for problem types with improved input validation and error handling
+* Reorganized imports in courses.py for better code readability
+* Updated delete_xblock logic to use acting_user parameter consistently
+
+Fixed
+=====
+
+* Corrected delete_xblock logic parameter usage from user_identifier to acting_user
 
 Version 1.0.0 (2025-08-27)
 ***************************
