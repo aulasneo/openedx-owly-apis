@@ -242,3 +242,15 @@ class TestOpenedXRolesViewSet:
         resp2 = view(req2)
         assert resp2.status_code == 200
         assert resp2.data["effective_role"] == "SuperAdmin"
+
+
+class TestOpenedXConfigViewSet:
+    def test_enable_owly_chat_calls_logic(self, api_factory):
+        from openedx_owly_apis.views.config_openedx import OpenedXConfigViewSet
+        view = OpenedXConfigViewSet.as_view({"get": "enable_owly_chat"})
+        req = api_factory.get("/owly-config/enable_owly_chat/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "is_owly_chat_enabled_logic"

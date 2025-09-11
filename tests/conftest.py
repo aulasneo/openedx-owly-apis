@@ -162,6 +162,17 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     sys.modules["openedx_owly_apis.operations.analytics"] = ops_analytics
     stubs.append("openedx_owly_apis.operations.analytics")
 
+    # Stub configuration operations module
+    ops_config = types.ModuleType("openedx_owly_apis.operations.config")
+
+    def _cfg_logic(request):  # pylint: disable=unused-argument
+        # Echo a simple payload to assert the view is wiring correctly
+        return {"called": "is_owly_chat_enabled_logic", "kwargs": {}}
+
+    ops_config.is_owly_chat_enabled_logic = _cfg_logic
+    sys.modules["openedx_owly_apis.operations.config"] = ops_config
+    stubs.append("openedx_owly_apis.operations.config")
+
     try:
         yield
     finally:
