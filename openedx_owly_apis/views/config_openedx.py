@@ -14,13 +14,7 @@ class OpenedXConfigViewSet(viewsets.ViewSet):
     """
     ViewSet para configuracuión de la plataforma Open edX.
     """
-    authentication_classes = (
-        JwtAuthentication,
-        BearerAuthentication,
-        SessionAuthentication,
-    )
-    permission_classes = [IsAdminOrCourseStaff]
-
+    
     @action(detail=False, methods=['get'], url_path='enable_owly_chat')
     def enable_owly_chat(self, request):
         """Return whether the Owly chat is enabled by waffle flag.
