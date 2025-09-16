@@ -23,6 +23,7 @@ from openedx_owly_apis.operations.courses import (
     delete_xblock_logic,
     enable_configure_certificates_logic,
     publish_content_logic,
+    set_grade_logic,
     update_advanced_settings_logic,
     update_course_settings_logic,
 )
@@ -296,6 +297,38 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         data = request.data
         result = delete_xblock_logic(
             block_id=data.get('block_id'),
+            user_identifier=request.user.id
+        )
+        return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='grades/set',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def set_grade(self, request):
+        """
+        Set grade for a student in a specific course unit/problem
+        
+        Expected payload:
+        {
+            "course_id": "course-v1:ORG+NUM+RUN",
+            "student_identifier": "username_or_email_or_id",
+            "grade_data": {
+                "usage_key": "block-v1:ORG+NUM+RUN+type@problem+block@GUID",
+                "score": 85.5,
+                "max_score": 100.0,
+                "comment": "Good work!",
+                "force_update": false
+            }
+        }
+        """
+        data = request.data
+        result = set_grade_logic(
+            course_id=data.get('course_id'),
+            student_identifier=data.get('student_identifier'),
+            grade_data=data.get('grade_data', {}),
             user_identifier=request.user.id
         )
         return Response(result)

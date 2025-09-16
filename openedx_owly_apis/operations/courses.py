@@ -2395,3 +2395,308 @@ def toggle_certificate_simple_logic(course_id: str, is_active: bool, user_identi
             "message": f"Failed to toggle certificate: {str(e)}",
             "course_id": course_id
         }
+
+
+def set_grade_logic(course_id: str, student_identifier: str, grade_data: dict, user_identifier=None) -> dict:
+    """
+    Set grade for a student in a specific course unit/problem
+    
+    Args:
+        course_id: Course identifier (e.g., 'course-v1:ORG+NUM+RUN')
+        student_identifier: Student username, email, or user ID
+        grade_data: Dictionary containing:
+            - usage_key: Unit/problem usage key to grade
+            - score: Score to assign (float)
+            - max_score: Maximum possible score (float, optional)
+            - comment: Grading comment (string, optional)
+            - force_update: Force update even if score exists (bool, default False)
+        user_identifier: Acting user (instructor/staff)
+    
+    Returns:
+        dict: Success/error response with grading details
+    """
+    
+    try:
+        logger.info(
+            "set_grade_logic start course_id=%s student=%s grade_data=%s requested_by=%s",
+            course_id, student_identifier, grade_data, str(user_identifier)
+        )
+        
+        # Validate required parameters
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+            
+        if not student_identifier:
+            return {
+                "success": False,
+                "error": "missing_student",
+                "message": "student_identifier is required"
+            }
+            
+        if not grade_data or not isinstance(grade_data, dict):
+            return {
+                "success": False,
+                "error": "invalid_grade_data",
+                "message": "grade_data must be a dictionary"
+            }
+            
+        usage_key_str = grade_data.get('usage_key')
+        score = grade_data.get('score')
+        
+        if not usage_key_str:
+            return {
+                "success": False,
+                "error": "missing_usage_key",
+                "message": "usage_key is required in grade_data"
+            }
+            
+        if score is None:
+            return {
+                "success": False,
+                "error": "missing_score",
+                "message": "score is required in grade_data"
+            }
+            
+        try:
+            score = float(score)
+        except (ValueError, TypeError):
+            return {
+                "success": False,
+                "error": "invalid_score",
+                "message": "score must be a valid number"
+            }
+        
+        # Get acting user (instructor/staff)
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "no_acting_user",
+                "message": "No valid acting user found"
+            }
+        
+        # Get student user
+        student_user = _resolve_user(student_identifier)
+        if not student_user:
+            return {
+                "success": False,
+                "error": "student_not_found",
+                "message": f"Student not found: {student_identifier}"
+            }
+        
+        # Parse course key
+        try:
+            from opaque_keys.edx.keys import CourseKey
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {course_id}"
+            }
+        
+        # Parse usage key
+        try:
+            from opaque_keys.edx.keys import UsageKey
+            usage_key = UsageKey.from_string(usage_key_str)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_usage_key",
+                "message": f"Invalid usage_key format: {usage_key_str}"
+            }
+        
+        # Verify course exists
+        from xmodule.modulestore.django import modulestore
+        store = modulestore()
+        course = store.get_course(course_key)
+        
+        if not course:
+            return {
+                "success": False,
+                "error": "course_not_found",
+                "message": f"Course not found: {course_id}"
+            }
+        
+        # Verify unit/problem exists
+        try:
+            unit_item = store.get_item(usage_key)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "unit_not_found",
+                "message": f"Unit/problem not found: {usage_key_str}"
+            }
+        
+        # Check if student is enrolled in the course
+        try:
+            enrollment = CourseEnrollment.objects.get(
+                user=student_user,
+                course_id=course_key
+            )
+        except CourseEnrollment.DoesNotExist:
+            return {
+                "success": False,
+                "error": "student_not_enrolled",
+                "message": f"Student {student_user.username} is not enrolled in course {course_id}"
+            }
+        
+        # Set up grading parameters
+        max_score = grade_data.get('max_score')
+        if max_score is not None:
+            try:
+                max_score = float(max_score)
+            except (ValueError, TypeError):
+                max_score = None
+        
+        comment = grade_data.get('comment', '')
+        force_update = grade_data.get('force_update', False)
+        
+        # Import grading modules
+        try:
+            from lms.djangoapps.grades.subsection_grade_factory import SubsectionGradeFactory
+            from lms.djangoapps.grades.course_grade_factory import CourseGradeFactory
+            from lms.djangoapps.courseware.models import StudentModule
+            from lms.djangoapps.grades.models import PersistentSubsectionGrade
+            from openedx.core.djangoapps.user_api.models import UserPreference
+        except ImportError as e:
+            logger.error(f"Failed to import grading modules: {e}")
+            return {
+                "success": False,
+                "error": "import_error",
+                "message": "Grading modules not available"
+            }
+        
+        # Check if grade already exists (unless force_update is True)
+        if not force_update:
+            try:
+                existing_module = StudentModule.objects.get(
+                    student=student_user,
+                    course_id=course_key,
+                    module_state_key=usage_key
+                )
+                if existing_module.grade is not None:
+                    return {
+                        "success": False,
+                        "error": "grade_exists",
+                        "message": f"Grade already exists for this student and unit. Use force_update=true to override.",
+                        "existing_grade": existing_module.grade,
+                        "existing_max_grade": existing_module.max_grade
+                    }
+            except StudentModule.DoesNotExist:
+                pass  # No existing grade, proceed
+        
+        # Set the grade using OpenedX StudentModule directly
+        try:
+            # If max_score is not provided, try to get it from the unit
+            if max_score is None:
+                if hasattr(unit_item, 'max_score') and callable(unit_item.max_score):
+                    max_score = float(unit_item.max_score())
+                elif hasattr(unit_item, 'weight') and unit_item.weight:
+                    max_score = float(unit_item.weight)
+                else:
+                    max_score = 1.0  # Default max score
+            
+            # Create or update StudentModule directly
+            student_module, created = StudentModule.objects.get_or_create(
+                student=student_user,
+                course_id=course_key,
+                module_state_key=usage_key,
+                defaults={
+                    'grade': score,
+                    'max_grade': max_score,
+                    'state': json.dumps({'manually_graded': True})
+                }
+            )
+            
+            if not created:
+                # Update existing module
+                student_module.grade = score
+                student_module.max_grade = max_score
+                current_state = json.loads(student_module.state or '{}')
+                current_state['manually_graded'] = True
+                student_module.state = json.dumps(current_state)
+                student_module.save()
+            
+            # Add comment if provided
+            if comment:
+                try:
+                    # Update the state with comment
+                    current_state = json.loads(student_module.state or '{}')
+                    current_state['comment'] = comment
+                    current_state['manually_graded'] = True
+                    student_module.state = json.dumps(current_state)
+                    student_module.save()
+                        
+                except Exception as comment_error:
+                    logger.warning(f"Failed to save comment: {comment_error}")
+            
+            # Invalidate course grades cache to reflect the new grade
+            try:
+                from lms.djangoapps.grades.api import CourseGradeFactory
+                from lms.djangoapps.grades.subsection_grade_factory import SubsectionGradeFactory
+                from lms.djangoapps.grades.models import PersistentSubsectionGrade, PersistentCourseGrade
+                
+                # Force update course grade
+                CourseGradeFactory().update(student_user, course_key, force_update_subsections=True)
+                
+                # Clear persistent grades cache
+                PersistentSubsectionGrade.objects.filter(
+                    user_id=student_user.id,
+                    course_id=course_key
+                ).delete()
+                
+                PersistentCourseGrade.objects.filter(
+                    user_id=student_user.id,
+                    course_id=course_key
+                ).delete()
+                
+                logger.info("Successfully invalidated grades cache")
+                
+            except Exception as cache_error:
+                logger.warning(f"Failed to update course grade cache: {cache_error}")
+            
+            logger.info(
+                f"Successfully set grade: student={student_user.username}, "
+                f"course={course_id}, unit={usage_key_str}, score={score}/{max_score}"
+            )
+            
+            return {
+                "success": True,
+                "message": "Grade set successfully",
+                "grade_details": {
+                    "student_username": student_user.username,
+                    "student_email": student_user.email,
+                    "course_id": course_id,
+                    "usage_key": usage_key_str,
+                    "unit_display_name": getattr(unit_item, 'display_name', 'Unknown'),
+                    "score": score,
+                    "max_score": max_score,
+                    "comment": comment,
+                    "graded_by": acting_user.username,
+                    "graded_at": timezone.now().isoformat()
+                }
+            }
+            
+        except Exception as grading_error:
+            logger.exception(f"Error setting grade: {grading_error}")
+            return {
+                "success": False,
+                "error": "grading_failed",
+                "message": f"Failed to set grade: {str(grading_error)}"
+            }
+        
+    except Exception as e:
+        logger.exception(f"Unexpected error in set_grade_logic: {e}")
+        return {
+            "success": False,
+            "error": "unexpected_error",
+            "message": f"Unexpected error: {str(e)}",
+            "course_id": course_id,
+            "student": student_identifier,
+            "requested_by": str(user_identifier)
+        }
