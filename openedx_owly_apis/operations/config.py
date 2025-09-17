@@ -19,7 +19,7 @@ FLAG_NAME = "owly_chat.enable"
 def is_owly_chat_enabled_logic(request, user_email=None) -> Dict[str, bool]:
     """Return whether the Owly chat feature is enabled via waffle flag.
 
-    Uses waffle.flag_is_active to respect percentage, groups, and user context.
+    Uses waffle Flag.is_active_for_user to respect percentage, groups, and user context.
     Falls back to False on any error or when the flag is missing.
 
     Args:
@@ -29,7 +29,6 @@ def is_owly_chat_enabled_logic(request, user_email=None) -> Dict[str, bool]:
     """
     try:
         # waffle is available in edx-platform; this respects request/user context
-        from waffle import flag_is_active
         from waffle.models import Flag
 
         # Verificar que el flag existe
@@ -60,11 +59,8 @@ def is_owly_chat_enabled_logic(request, user_email=None) -> Dict[str, bool]:
                     "message": f"Failed to lookup user: {str(e)}"
                 }
 
-        # Verificar directamente si es superuser y el flag lo permite
-        if flag.superusers and target_user and target_user.is_superuser:
-            return {"enabled": True}
-
-        enabled = bool(flag_is_active(request, FLAG_NAME))
+        # Usar el método is_active_for_user del objeto flag
+        enabled = bool(flag.is_active_for_user(target_user))
 
         return {"enabled": enabled}
     except Exception as e:
