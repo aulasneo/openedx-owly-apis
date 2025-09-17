@@ -308,25 +308,20 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def manage_course_staff(self, request):
         """
-        Add or remove users from course staff roles
+        Add or remove users from course staff roles.
 
         Supports the following role types:
-        - staff: Course staff role (can edit course content)
-        - course_creator: Global course creator role (can create new courses)
+            staff: Course staff role (can edit course content)
+            course_creator: Global course creator role (can create new courses)
 
         Body parameters:
-        - course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
-        - user_identifier (str): User to add/remove (username, email, or user_id)
-        - action (str): "add" or "remove"
-        - role_type (str): "staff" or "course_creator"
+            course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+            user_identifier (str): User to add/remove (username, email, or user_id)
+            action (str): "add" or "remove"
+            role_type (str): "staff" or "course_creator"
 
-        Example:
-        {
-            "course_id": "course-v1:TestX+CS101+2024",
-            "user_identifier": "john.doe@example.com",
-            "action": "add",
-            "role_type": "staff"
-        }
+        Returns:
+            Response: JSON response with operation result
         """
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import manage_course_staff_logic
@@ -348,35 +343,19 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def list_course_staff(self, request):
         """
-        List users with course staff roles
+        List users with course staff roles.
 
         Query parameters:
-        - course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
-        - role_type (str, optional): Filter by role type - "staff", "course_creator", or omit for all
+            course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+            role_type (str, optional): Filter by role type - "staff", "course_creator", or omit for all
 
         Examples:
-        GET /api/v1/owly-courses/staff/list/?course_id=course-v1:TestX+CS101+2024
-        GET /api/v1/owly-courses/staff/list/?course_id=course-v1:TestX+CS101+2024&role_type=staff
-        GET /api/v1/owly-courses/staff/list/?course_id=course-v1:TestX+CS101+2024&role_type=course_creator
+            GET /api/v1/owly-courses/staff/list/?course_id=course-v1:TestX+CS101+2024
+            GET /api/v1/owly-courses/staff/list/?course_id=course-v1:TestX+CS101+2024&role_type=staff
+            GET /api/v1/owly-courses/staff/list/?course_id=course-v1:TestX+CS101+2024&role_type=course_creator
 
-        Response:
-        {
-            "success": true,
-            "course_id": "course-v1:TestX+CS101+2024",
-            "role_type_filter": "staff",
-            "total_users": 2,
-            "users": [
-                {
-                    "user_id": 123,
-                    "username": "john.doe",
-                    "email": "john.doe@example.com",
-                    "first_name": "John",
-                    "last_name": "Doe",
-                    "role": "staff",
-                    "role_description": "Course staff (can edit course content)"
-                }
-            ]
-        }
+        Returns:
+            Response: JSON response with list of users and their roles
         """
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import list_course_staff_logic
