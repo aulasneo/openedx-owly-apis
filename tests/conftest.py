@@ -139,6 +139,8 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_courses.create_openedx_problem_logic = _simple_ret("create_openedx_problem_logic")
     ops_courses.publish_content_logic = _simple_ret("publish_content_logic")
     ops_courses.delete_xblock_logic = _simple_ret("delete_xblock_logic")
+    ops_courses.manage_course_staff_logic = _simple_ret("manage_course_staff_logic")
+    ops_courses.list_course_staff_logic = _simple_ret("list_course_staff_logic")
     sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
     stubs.append("openedx_owly_apis.operations.courses")
 
@@ -165,9 +167,9 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     # Stub configuration operations module
     ops_config = types.ModuleType("openedx_owly_apis.operations.config")
 
-    def _cfg_logic(request):  # pylint: disable=unused-argument
+    def _cfg_logic(request, user_email=None):  # pylint: disable=unused-argument
         # Echo a simple payload to assert the view is wiring correctly
-        return {"called": "is_owly_chat_enabled_logic", "kwargs": {}}
+        return {"called": "is_owly_chat_enabled_logic", "kwargs": {"user_email": user_email}}
 
     ops_config.is_owly_chat_enabled_logic = _cfg_logic
     sys.modules["openedx_owly_apis.operations.config"] = ops_config

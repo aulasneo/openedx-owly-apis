@@ -195,6 +195,188 @@ class TestOpenedXCourseViewSet:
         assert resp.status_code == 200
         assert resp.data["called"] == "update_advanced_settings_logic"
 
+    def test_manage_course_staff_add_staff_calls_logic(self, api_factory):
+        """Test adding a user to course staff role"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
+        req = api_factory.post(
+            "/owly-courses/staff/manage/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "user_identifier": "john.doe@example.com",
+                "action": "add",
+                "role_type": "staff"
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)  # User needs course staff permissions
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "manage_course_staff_logic"
+        # Verify the parameters passed to the logic function
+        assert resp.data["kwargs"]["course_id"] == "course-v1:TestX+CS101+2024"
+        assert resp.data["kwargs"]["user_identifier"] == "john.doe@example.com"
+        assert resp.data["kwargs"]["action"] == "add"
+        assert resp.data["kwargs"]["role_type"] == "staff"
+
+    def test_manage_course_staff_remove_staff_calls_logic(self, api_factory):
+        """Test removing a user from course staff role"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
+        req = api_factory.post(
+            "/owly-courses/staff/manage/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "user_identifier": "john.doe",
+                "action": "remove",
+                "role_type": "staff"
+            },
+            format="json",
+        )
+        user = _auth_user(is_superuser=True)  # Superuser can manage staff
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "manage_course_staff_logic"
+        assert resp.data["kwargs"]["action"] == "remove"
+        assert resp.data["kwargs"]["role_type"] == "staff"
+
+    def test_manage_course_staff_add_course_creator_calls_logic(self, api_factory):
+        """Test adding a user to course creator role (OWLY-178 use case)"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
+        req = api_factory.post(
+            "/owly-courses/staff/manage/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "user_identifier": "creator@example.com",
+                "action": "add",
+                "role_type": "course_creator"
+            },
+            format="json",
+        )
+        user = _auth_user(is_superuser=True)  # Only superuser can manage course creators
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "manage_course_staff_logic"
+        assert resp.data["kwargs"]["role_type"] == "course_creator"
+        assert resp.data["kwargs"]["action"] == "add"
+
+    def test_manage_course_staff_remove_course_creator_calls_logic(self, api_factory):
+        """Test removing a user from course creator role (OWLY-178 specific case)"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
+        req = api_factory.post(
+            "/owly-courses/staff/manage/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "user_identifier": "creator@example.com",
+                "action": "remove",
+                "role_type": "course_creator"
+            },
+            format="json",
+        )
+        user = _auth_user(is_superuser=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "manage_course_staff_logic"
+        assert resp.data["kwargs"]["role_type"] == "course_creator"
+        assert resp.data["kwargs"]["action"] == "remove"
+
+    def test_manage_course_staff_with_user_id_calls_logic(self, api_factory):
+        """Test managing staff using user_id instead of email/username"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
+        req = api_factory.post(
+            "/owly-courses/staff/manage/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "user_identifier": "123",  # Using user_id
+                "action": "add",
+                "role_type": "staff"
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "manage_course_staff_logic"
+        assert resp.data["kwargs"]["user_identifier"] == "123"
+
+    def test_list_course_staff_all_roles_calls_logic(self, api_factory):
+        """Test listing all users with course staff roles"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"get": "list_course_staff"})
+        req = api_factory.get(
+            "/owly-courses/staff/list/",
+            {"course_id": "course-v1:TestX+CS101+2024"}
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "list_course_staff_logic"
+        assert resp.data["kwargs"]["course_id"] == "course-v1:TestX+CS101+2024"
+        assert resp.data["kwargs"]["role_type"] is None  # No filter
+
+    def test_list_course_staff_filter_by_staff_calls_logic(self, api_factory):
+        """Test listing only course staff users"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"get": "list_course_staff"})
+        req = api_factory.get(
+            "/owly-courses/staff/list/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "role_type": "staff"
+            }
+        )
+        user = _auth_user(is_superuser=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "list_course_staff_logic"
+        assert resp.data["kwargs"]["course_id"] == "course-v1:TestX+CS101+2024"
+        assert resp.data["kwargs"]["role_type"] == "staff"
+
+    def test_list_course_staff_filter_by_course_creator_calls_logic(self, api_factory):
+        """Test listing only course creator users"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"get": "list_course_staff"})
+        req = api_factory.get(
+            "/owly-courses/staff/list/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "role_type": "course_creator"
+            }
+        )
+        user = _auth_user(is_superuser=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "list_course_staff_logic"
+        assert resp.data["kwargs"]["course_id"] == "course-v1:TestX+CS101+2024"
+        assert resp.data["kwargs"]["role_type"] == "course_creator"
+
+    def test_list_course_staff_different_course_calls_logic(self, api_factory):
+        """Test listing staff for different course"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"get": "list_course_staff"})
+        req = api_factory.get(
+            "/owly-courses/staff/list/",
+            {"course_id": "course-v1:Aulasneo+PYTHON101+2024"}
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "list_course_staff_logic"
+        assert resp.data["kwargs"]["course_id"] == "course-v1:Aulasneo+PYTHON101+2024"
+        assert resp.data["kwargs"]["acting_user_identifier"] == "tester"
+
 
 class TestOpenedXAnalyticsViewSet:
     def test_overview_calls_logic(self, api_factory):
