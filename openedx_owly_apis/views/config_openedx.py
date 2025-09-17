@@ -17,6 +17,14 @@ class OpenedXConfigViewSet(viewsets.ViewSet):
         Endpoint behavior as requested in OWLY-170:
         - Queries a waffle flag (owly_chat.enable) to determine availability.
         - If enabled, returns {"enabled": true}; else returns {"enabled": false}.
+
+        Query parameters:
+        - email (optional): Email of specific user to check instead of request.user
+
+        Examples:
+        GET /api/v1/owly-config/enable_owly_chat/
+        GET /api/v1/owly-config/enable_owly_chat/?email=admin@example.com
         """
-        result = is_owly_chat_enabled_logic(request)
+        user_email = request.query_params.get('email')
+        result = is_owly_chat_enabled_logic(request, user_email=user_email)
         return Response(result)

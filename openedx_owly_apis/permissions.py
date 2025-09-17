@@ -2,14 +2,14 @@
 Custom DRF permissions for Open edX roles.
 
 - IsCourseCreator: requiere que el usuario sea creador de cursos (global u org)
-- IsCourseStaff: requiere que el usuario sea staff/instructor/limited_staff del curso
+- IsCourseStaff: requiere que el usuario sea staff del curso
 
 Se intenta resolver el contexto (curso/org) desde query params o body.
 """
 from typing import Optional
 
 from common.djangoapps.student.auth import CourseCreatorRole, OrgContentCreatorRole, user_has_role
-from common.djangoapps.student.roles import CourseInstructorRole, CourseLimitedStaffRole, CourseStaffRole
+from common.djangoapps.student.roles import CourseStaffRole
 from opaque_keys.edx.keys import CourseKey, UsageKey
 from rest_framework.permissions import BasePermission
 
@@ -77,7 +77,7 @@ class IsCourseStaff(BasePermission):
     message = "User must be Course Staff for the specified course"
 
     def has_permission(self, request, _view) -> bool:  # noqa: D401
-        """Return True if the user is staff/instructor/limited staff for the course."""
+        """Return True if the user is staff for the course."""
         user = request.user
         if not getattr(user, "is_authenticated", False):
             return False
@@ -87,11 +87,7 @@ class IsCourseStaff(BasePermission):
             # No hay forma de validar staff de curso sin contexto del curso
             return False
 
-        return (
-            CourseInstructorRole(course_key).has_user(user)
-            or CourseStaffRole(course_key).has_user(user)
-            or CourseLimitedStaffRole(course_key).has_user(user)
-        )
+        return CourseStaffRole(course_key).has_user(user)
 
 
 class IsAdminOrCourseCreator(BasePermission):

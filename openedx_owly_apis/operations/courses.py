@@ -2395,3 +2395,378 @@ def toggle_certificate_simple_logic(course_id: str, is_active: bool, user_identi
             "message": f"Failed to toggle certificate: {str(e)}",
             "course_id": course_id
         }
+
+
+def manage_course_staff_logic(course_id, user_identifier, action, role_type="staff", acting_user_identifier=None):
+    """
+    Add or remove users from course staff roles.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        user_identifier (str): User to add/remove (username, email, or user_id)
+        action (str): "add" or "remove"
+        role_type (str): Type of role - "staff" or "course_creator"
+        acting_user_identifier: User performing the action
+
+    Returns:
+        dict: Success/error response with details
+    """
+    from common.djangoapps.student.auth import CourseCreatorRole, OrgContentCreatorRole
+    from common.djangoapps.student.roles import CourseStaffRole
+    from opaque_keys.edx.keys import CourseKey
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not user_identifier:
+            return {
+                "success": False,
+                "error": "missing_user_identifier",
+                "message": "user_identifier is required"
+            }
+
+        if action not in ["add", "remove"]:
+            return {
+                "success": False,
+                "error": "invalid_action",
+                "message": "action must be 'add' or 'remove'"
+            }
+
+        if role_type not in ["staff", "course_creator"]:
+            return {
+                "success": False,
+                "error": "invalid_role_type",
+                "message": "role_type must be 'staff' or 'course_creator'"
+            }
+
+        # Normalize course_id: handle URL encoding/decoding and ensure proper format
+        import urllib.parse
+
+        # First decode any URL encoding (e.g., %2B -> +)
+        course_id = urllib.parse.unquote(course_id)
+
+        # Then handle cases where spaces were incorrectly interpreted as +
+        # If we detect spaces in course_id, convert them back to +
+        if ' ' in course_id and '+' not in course_id:
+            # This handles the case where + was interpreted as spaces
+            parts = course_id.split(' ')
+            if len(parts) >= 3 and parts[0].startswith('course-v1:'):
+                course_id = '+'.join(parts)
+                logger.info(f"Converted spaces to + in course_id: {course_id}")
+
+        # Get acting user (who is performing the action)
+        acting_user = _get_acting_user(acting_user_identifier)
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "acting_user_not_found",
+                "message": f"Acting user not found: {acting_user_identifier}"
+            }
+
+        # Resolve target user
+        target_user = _resolve_user(user_identifier)
+        if not target_user:
+            return {
+                "success": False,
+                "error": "target_user_not_found",
+                "message": f"Target user not found: {user_identifier}"
+            }
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Verify course exists
+        from xmodule.modulestore.django import modulestore
+        store = modulestore()
+        course = store.get_course(course_key)
+        if not course:
+            return {
+                "success": False,
+                "error": "course_not_found",
+                "message": f"Course not found: {course_id}"
+            }
+
+        # Get the appropriate role class
+        role_classes = {
+            "staff": CourseStaffRole,
+        }
+
+        # Handle course_creator role differently (global role)
+        if role_type == "course_creator":
+            # Extract org from course_key for OrgContentCreatorRole
+            org = course_key.org
+
+            if action == "add":
+                # Add global course creator role
+                CourseCreatorRole().add_users(target_user)
+                # Also add org-specific role
+                OrgContentCreatorRole(org=org).add_users(target_user)
+
+                logger.info(
+                    f"Added course creator role to user {target_user.username} "
+                    f"(global and org={org}) by {acting_user.username}"
+                )
+
+                return {
+                    "success": True,
+                    "message": f"Successfully added course creator role to {target_user.username}",
+                    "action": "add",
+                    "role_type": "course_creator",
+                    "target_user": {
+                        "id": target_user.id,
+                        "username": target_user.username,
+                        "email": target_user.email
+                    },
+                    "course_id": course_id,
+                    "org": org,
+                    "acting_user": acting_user.username
+                }
+            else:  # remove
+                # Remove global course creator role
+                CourseCreatorRole().remove_users(target_user)
+                # Also remove org-specific role
+                OrgContentCreatorRole(org=org).remove_users(target_user)
+
+                logger.info(
+                    f"Removed course creator role from user {target_user.username} "
+                    f"(global and org={org}) by {acting_user.username}"
+                )
+
+                return {
+                    "success": True,
+                    "message": f"Successfully removed course creator role from {target_user.username}",
+                    "action": "remove",
+                    "role_type": "course_creator",
+                    "target_user": {
+                        "id": target_user.id,
+                        "username": target_user.username,
+                        "email": target_user.email
+                    },
+                    "course_id": course_id,
+                    "org": org,
+                    "acting_user": acting_user.username
+                }
+
+        # Handle course-specific roles (staff only)
+        role_class = role_classes[role_type]
+        role_instance = role_class(course_key)
+
+        # Check if user already has the role
+        has_role = role_instance.has_user(target_user)
+
+        if action == "add":
+            if has_role:
+                return {
+                    "success": False,
+                    "error": "user_already_has_role",
+                    "message": f"User {target_user.username} already has {role_type} role in course {course_id}"
+                }
+
+            # Add the role
+            role_instance.add_users(target_user)
+
+            logger.info(
+                f"Added {role_type} role to user {target_user.username} "
+                f"in course {course_id} by {acting_user.username}"
+            )
+
+            return {
+                "success": True,
+                "message": f"Successfully added {role_type} role to {target_user.username}",
+                "action": "add",
+                "role_type": role_type,
+                "target_user": {
+                    "id": target_user.id,
+                    "username": target_user.username,
+                    "email": target_user.email
+                },
+                "course_id": course_id,
+                "acting_user": acting_user.username
+            }
+
+        else:  # remove
+            if not has_role:
+                return {
+                    "success": False,
+                    "error": "user_does_not_have_role",
+                    "message": f"User {target_user.username} does not have {role_type} role in course {course_id}"
+                }
+
+            # Remove the role
+            role_instance.remove_users(target_user)
+
+            logger.info(
+                f"Removed {role_type} role from user {target_user.username} "
+                f"in course {course_id} by {acting_user.username}"
+            )
+
+            return {
+                "success": True,
+                "message": f"Successfully removed {role_type} role from {target_user.username}",
+                "action": "remove",
+                "role_type": role_type,
+                "target_user": {
+                    "id": target_user.id,
+                    "username": target_user.username,
+                    "email": target_user.email
+                },
+                "course_id": course_id,
+                "acting_user": acting_user.username
+            }
+
+    except Exception as e:
+        logger.exception(f"Error managing course staff: {e}")
+        return {
+            "success": False,
+            "error": "operation_failed",
+            "message": f"Failed to {action} {role_type} role: {str(e)}",
+            "course_id": course_id,
+            "user_identifier": user_identifier,
+            "action": action,
+            "role_type": role_type
+        }
+
+
+def list_course_staff_logic(course_id, role_type=None, acting_user_identifier=None):
+    """
+    List users with course staff roles.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        role_type (str, optional): Filter by role type - "staff", "course_creator", or None for all
+        acting_user_identifier: User performing the query
+
+    Returns:
+        dict: Success response with list of users and their roles
+    """
+    import logging
+
+    from common.djangoapps.student.auth import CourseCreatorRole, OrgContentCreatorRole
+    from common.djangoapps.student.roles import CourseStaffRole
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if role_type and role_type not in ["staff", "course_creator"]:
+            return {
+                "success": False,
+                "error": "invalid_role_type",
+                "message": "role_type must be 'staff', 'course_creator', or None"
+            }
+
+        # Normalize course_id: handle URL encoding/decoding and ensure proper format
+        import urllib.parse
+
+        # First decode any URL encoding (e.g., %2B -> +)
+        course_id = urllib.parse.unquote(course_id)
+
+        # Then handle cases where spaces were incorrectly interpreted as +
+        # If we detect spaces in course_id, convert them back to +
+        if ' ' in course_id and '+' not in course_id:
+            # This handles the case where + was interpreted as spaces
+            parts = course_id.split(' ')
+            if len(parts) >= 3 and parts[0].startswith('course-v1:'):
+                course_id = '+'.join(parts)
+                logger.info(f"Converted spaces to + in course_id: {course_id}")
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format. Expected format: 'course-v1:ORG+COURSE+RUN'. "
+                           f"Received: '{course_id}'. Error: {str(e)}. "
+                           f"Note: The API automatically handles URL encoding/decoding."
+            }
+
+        User = get_user_model()
+        users_data = []
+
+        # Get course staff users
+        if not role_type or role_type == "staff":
+            staff_role = CourseStaffRole(course_key)
+            staff_users = staff_role.users_with_role()
+
+            for user in staff_users:
+                users_data.append({
+                    "user_id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "role": "staff",
+                    "role_description": "Course staff (can edit course content)"
+                })
+
+        # Get course creator users
+        if not role_type or role_type == "course_creator":
+            # Global course creators
+            global_creator_role = CourseCreatorRole()
+            global_creators = global_creator_role.users_with_role()
+
+            # Organization-specific course creators
+            org = course_key.org
+            org_creator_role = OrgContentCreatorRole(org)
+            org_creators = org_creator_role.users_with_role()
+
+            # Combine and deduplicate
+            all_creators = set(global_creators) | set(org_creators)
+
+            for user in all_creators:
+                # Check if user already added as staff
+                if not any(u["user_id"] == user.id for u in users_data):
+                    users_data.append({
+                        "user_id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "first_name": user.first_name,
+                        "last_name": user.last_name,
+                        "role": "course_creator",
+                        "role_description": "Course creator (can create new courses)"
+                    })
+
+        # Sort by username for consistent results
+        users_data.sort(key=lambda x: x["username"])
+
+        return {
+            "success": True,
+            "course_id": course_id,
+            "role_type_filter": role_type,
+            "total_users": len(users_data),
+            "users": users_data,
+            "acting_user": acting_user_identifier
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": "query_failed",
+            "message": f"Failed to list course staff: {str(e)}",
+            "course_id": course_id,
+            "role_type": role_type
+        }
