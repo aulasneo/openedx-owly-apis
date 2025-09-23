@@ -9,7 +9,28 @@ Change Log
 
    This project adheres to Semantic Versioning (https://semver.org/).
 
-.. There should always be an "Version 1.1.0 (2025-09-08)" section for changes pending release.
+.. There should always be an "Version 1.2.0 (2025-09-23)" section for changes pending release.
+
+Version 1.2.0 (2025-09-23)
+**********
+
+Added
+=====
+
+- Add course staff management endpoints and enhance waffle flag checks (ed44fa2)
+- Add OpenedXConfigViewSet for managing Owly chat feature toggle (5b480a2)
+
+Changed
+=======
+
+- Remove unused authentication and permission imports from config view (d2e6e98)
+- Remove authentication and permission classes from OpenedXConfigViewSet (1146370)
+
+Documentation
+=============
+
+- Improve API documentation formatting and clarity for course staff endpoints (db63cbe)
+
 
 Version 1.1.0 (2025-09-08)
 **************************

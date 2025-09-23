@@ -43,10 +43,20 @@ API Summary
 Base router registrations are defined in ``openedx_owly_apis/urls.py``:
 
 - ``/owly-analytics/`` → ``OpenedXAnalyticsViewSet``
+- ``/owly-config/`` → ``OpenedXConfigViewSet``
 - ``/owly-courses/`` → ``OpenedXCourseViewSet``
 - ``/owly-roles/`` → ``OpenedXRolesViewSet``
 
 Authentication is supported via JWT/Bearer/Session. Specific permissions are enforced per endpoint (see notes below).
+
+Configuration endpoints (GET)
+=============================
+
+ViewSet: ``openedx_owly_apis/views/config_openedx.py``
+Requires: Authenticated user.
+
+- ``GET /owly-config/enable_owly_chat``
+  Check if the Owly chat feature is enabled via waffle flag. Can check for a specific user by providing an ``email`` query parameter.
 
 Analytics endpoints (GET)
 =========================
@@ -85,10 +95,19 @@ Requires: Authenticated user. Additional role-based permissions per action.
   Add video content to a vertical. Requires admin, course creator, or course staff.
 
 - ``POST /owly-courses/content/problem``
-  Add problems/exercises to a vertical. Requires admin, course creator, or course staff.
+  Add problems/exercises to a vertical using XML. Requires admin, course creator, or course staff.
+
+- ``POST /owly-courses/content/problem/create``
+  Create a problem component with structured data (e.g., multiple choice). Requires admin, course creator, or course staff.
 
 - ``POST /owly-courses/content/discussion``
   Add discussion components to a vertical. Requires admin, course creator, or course staff.
+
+- ``POST /owly-courses/content/publish``
+  Publish a course or course component (unit, subsection, etc.). Requires admin or course staff.
+
+- ``POST /owly-courses/xblock/delete``
+  Delete an XBlock component from a course. Requires admin or course staff.
 
 - ``POST /owly-courses/settings/update``
   Update general course settings (dates, details, etc.). Requires admin or course staff.
@@ -97,10 +116,19 @@ Requires: Authenticated user. Additional role-based permissions per action.
   Update advanced course settings. Requires admin or course staff.
 
 - ``POST /owly-courses/certificates/configure``
-  Configure course certificates. Requires admin or course staff.
+  Configure or activate/deactivate course certificates. Requires admin or course staff.
 
 - ``POST /owly-courses/units/availability/control``
   Control unit availability and due dates. Requires admin or course staff.
+
+Staff management endpoints
+--------------------------
+
+- ``POST /owly-courses/staff/manage``
+  Add or remove a user from a course staff role (``staff`` or ``course_creator``). Requires admin or course staff.
+
+- ``GET /owly-courses/staff/list?course_id=<course-key>``
+  List users with staff roles for a given course. Requires admin or course staff.
 
 Roles endpoint (GET)
 ====================
