@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 FLAG_NAME = "owly_chat.enable"
 
 
-def is_owly_chat_enabled_logic(request, session_tokens=None) -> Dict[str, bool]:
+def is_owly_chat_enabled_logic(request) -> Dict[str, bool]:
     """Return whether the Owly chat feature is enabled via waffle flag.
 
     Uses waffle Flag.is_active_for_user to respect percentage, groups, and user context.
