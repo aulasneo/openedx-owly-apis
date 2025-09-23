@@ -12,7 +12,7 @@ Change Log
 .. There should always be an "Version 1.2.0 (2025-09-23)" section for changes pending release.
 
 Version 1.2.0 (2025-09-23)
-**********
+**************************
 
 Added
 =====
