@@ -16,16 +16,15 @@ logger = logging.getLogger(__name__)
 FLAG_NAME = "owly_chat.enable"
 
 
-def is_owly_chat_enabled_logic(request, user_email=None) -> Dict[str, bool]:
+def is_owly_chat_enabled_logic(request, session_tokens=None) -> Dict[str, bool]:
     """Return whether the Owly chat feature is enabled via waffle flag.
 
     Uses waffle.flag_is_active to respect percentage, groups, and user context.
     Falls back to False on any error or when the flag is missing.
 
     Args:
-        request: Django request object
-        user_email (str, optional): Email of specific user to check. If provided,
-                                   checks for that user instead of request.user
+        request: Django request object (uses request.user for waffle evaluation)
+        session_tokens: Optional dict with sessionid and csrftoken for external use
     """
     try:
         # waffle is available in edx-platform; this respects request/user context
@@ -39,36 +38,19 @@ def is_owly_chat_enabled_logic(request, user_email=None) -> Dict[str, bool]:
             logger.error(f"Flag {FLAG_NAME} does not exist!")
             return {"enabled": False}
 
-        # Determinar qué usuario verificar
-        target_user = request.user
-        if user_email:
-            try:
-                from django.contrib.auth import get_user_model
-                User = get_user_model()
-                target_user = User.objects.get(email=user_email)
-            except User.DoesNotExist:
-                return {
-                    "enabled": False,
-                    "error": "user_not_found",
-                    "message": f"User with email {user_email} not found"
-                }
-            except Exception as e:
-                logger.error(f"Error finding user {user_email}: {e}")
-                return {
-                    "enabled": False,
-                    "error": "user_lookup_failed",
-                    "message": f"Failed to lookup user: {str(e)}"
-                }
+        # Usar request.user para la evaluación del waffle flag
+        user = request.user
 
-        # Verificar directamente si es superuser y el flag lo permite
-        if flag.superusers and target_user and target_user.is_superuser:
-            return {"enabled": True}
-
-        enabled = bool(flag_is_active(request, FLAG_NAME))
+        # Verificar si el usuario está autenticado (no es AnonymousUser)
+        if user:
+            enabled = bool(flag.is_active_for_user(user))
+            logger.info(f"Authenticated user {user.username} (ID: {user.id}) has flag {FLAG_NAME} enabled: {enabled}")
+        else:
+            enabled = bool(flag_is_active(request, FLAG_NAME))
+            logger.info(f"Anonymous user has flag {FLAG_NAME} enabled: {enabled}")
 
         return {"enabled": enabled}
+
     except Exception as e:
-        # Conservative fallback: if waffle isn't available or any error occurs,
-        # treat as disabled.
-        logger.error(f"Error checking waffle flag: {e}")
+        logger.error(f"Error evaluating waffle flag {FLAG_NAME}: {e}")
         return {"enabled": False}
