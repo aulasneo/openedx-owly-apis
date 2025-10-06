@@ -376,12 +376,12 @@ class TestOpenedXCourseViewSet:
         assert resp.data["called"] == "list_course_staff_logic"
         assert resp.data["kwargs"]["course_id"] == "course-v1:Aulasneo+PYTHON101+2024"
         assert resp.data["kwargs"]["acting_user_identifier"] == "tester"
-        
+
     def test_add_ora_content_calls_logic(self, api_factory):
         """Test ORA (Open Response Assessment) content creation endpoint"""
         from openedx_owly_apis.views.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_ora_content"})
-        
+
         # Test data with complete ORA configuration
         ora_config = {
             "display_name": "Test Essay Assignment",
@@ -418,11 +418,11 @@ class TestOpenedXCourseViewSet:
             "allow_text_response": True,
             "allow_file_upload": False
         }
-        
+
         req = api_factory.post(
             "/owly-courses/content/ora/",
             {
-                "vertical_id": "block-v1:ORG+NUM+RUN+type@vertical+block@v1", 
+                "vertical_id": "block-v1:ORG+NUM+RUN+type@vertical+block@v1",
                 "ora_config": ora_config
             },
             format="json",
@@ -432,7 +432,7 @@ class TestOpenedXCourseViewSet:
         resp = view(req)
         assert resp.status_code == 200
         assert resp.data["called"] == "add_ora_content_logic"
-        
+
         # Verify the correct parameters were passed to the logic function
         assert resp.data["kwargs"]["vertical_id"] == "block-v1:ORG+NUM+RUN+type@vertical+block@v1"
         assert resp.data["kwargs"]["ora_config"]["display_name"] == "Test Essay Assignment"
@@ -443,7 +443,7 @@ class TestOpenedXCourseViewSet:
         """Test ORA creation with minimal configuration (self-assessment only)"""
         from openedx_owly_apis.views.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_ora_content"})
-        
+
         # Minimal ORA configuration
         minimal_ora_config = {
             "display_name": "Simple Reflection",
@@ -453,11 +453,11 @@ class TestOpenedXCourseViewSet:
             ],
             "allow_text_response": True
         }
-        
+
         req = api_factory.post(
             "/owly-courses/content/ora/",
             {
-                "vertical_id": "block-v1:ORG+NUM+RUN+type@vertical+block@v1", 
+                "vertical_id": "block-v1:ORG+NUM+RUN+type@vertical+block@v1",
                 "ora_config": minimal_ora_config
             },
             format="json",
@@ -467,7 +467,7 @@ class TestOpenedXCourseViewSet:
         resp = view(req)
         assert resp.status_code == 200
         assert resp.data["called"] == "add_ora_content_logic"
-        
+
         # Verify minimal config is handled correctly
         assert resp.data["kwargs"]["ora_config"]["display_name"] == "Simple Reflection"
         assert len(resp.data["kwargs"]["ora_config"]["assessments"]) == 1
@@ -477,7 +477,7 @@ class TestOpenedXCourseViewSet:
         """Test ORA creation with file upload capabilities"""
         from openedx_owly_apis.views.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_ora_content"})
-        
+
         # ORA configuration with file upload
         file_upload_ora_config = {
             "display_name": "Project Submission",
@@ -489,11 +489,11 @@ class TestOpenedXCourseViewSet:
             "allow_file_upload": True,
             "file_upload_type": "pdf-and-image"
         }
-        
+
         req = api_factory.post(
             "/owly-courses/content/ora/",
             {
-                "vertical_id": "block-v1:ORG+NUM+RUN+type@vertical+block@v1", 
+                "vertical_id": "block-v1:ORG+NUM+RUN+type@vertical+block@v1",
                 "ora_config": file_upload_ora_config
             },
             format="json",
@@ -503,7 +503,7 @@ class TestOpenedXCourseViewSet:
         resp = view(req)
         assert resp.status_code == 200
         assert resp.data["called"] == "add_ora_content_logic"
-        
+
         # Verify file upload configuration
         assert resp.data["kwargs"]["ora_config"]["allow_file_upload"] is True
         assert resp.data["kwargs"]["ora_config"]["file_upload_type"] == "pdf-and-image"
