@@ -378,7 +378,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def add_ora_content(self, request):
         """
-        Añadir Open Response Assessment (ORA) a un vertical
+        Añadir Open Response Assessment (ORA) a un vertical.
 
         ORAs permiten evaluaciones por pares, autoevaluaciones y evaluaciones por staff.
         Mapea directamente a add_ora_content_logic()
@@ -386,16 +386,17 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         Body parameters:
             vertical_id (str): ID del vertical donde agregar el ORA
             ora_config (dict): Configuración del ORA con:
-                - display_name (str): Nombre del ORA
-                - prompt (str): Pregunta/prompt para los estudiantes
-                - rubric (dict): Configuración de la rúbrica de evaluación
-                - assessments (list): Tipos de evaluación (self, peer, staff)
-                - submission_start (str, optional): Inicio de entregas (ISO datetime)
-                - submission_due (str, optional): Fecha límite entregas (ISO datetime)
-                - allow_text_response (bool, optional): Permitir respuestas de texto
-                - allow_file_upload (bool, optional): Permitir subida de archivos
-                - file_upload_type (str, optional): 'image', 'pdf-and-image', etc.
-                - leaderboard_show (int, optional): Número de mejores entregas a mostrar
+            
+                * display_name (str): Nombre del ORA
+                * prompt (str): Pregunta/prompt para los estudiantes
+                * rubric (dict): Configuración de la rúbrica de evaluación
+                * assessments (list): Tipos de evaluación (self, peer, staff)
+                * submission_start (str, optional): Inicio de entregas (ISO datetime)
+                * submission_due (str, optional): Fecha límite entregas (ISO datetime)
+                * allow_text_response (bool, optional): Permitir respuestas de texto
+                * allow_file_upload (bool, optional): Permitir subida de archivos
+                * file_upload_type (str, optional): 'image', 'pdf-and-image', etc.
+                * leaderboard_show (int, optional): Número de mejores entregas a mostrar
 
         Returns:
             Response: JSON response con resultado de la operación
