@@ -369,3 +369,44 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             acting_user_identifier=request.user.username
         )
         return Response(result)
+    
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='content/ora',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
+    )
+    def add_ora_content(self, request):
+        """
+        Añadir Open Response Assessment (ORA) a un vertical
+        
+        ORAs permiten evaluaciones por pares, autoevaluaciones y evaluaciones por staff.
+        Mapea directamente a add_ora_content_logic()
+        
+        Body parameters:
+            vertical_id (str): ID del vertical donde agregar el ORA
+            ora_config (dict): Configuración del ORA con:
+                - display_name (str): Nombre del ORA
+                - prompt (str): Pregunta/prompt para los estudiantes  
+                - rubric (dict): Configuración de la rúbrica de evaluación
+                - assessments (list): Tipos de evaluación (self, peer, staff)
+                - submission_start (str, optional): Inicio de entregas (ISO datetime)
+                - submission_due (str, optional): Fecha límite entregas (ISO datetime)
+                - allow_text_response (bool, optional): Permitir respuestas de texto
+                - allow_file_upload (bool, optional): Permitir subida de archivos
+                - file_upload_type (str, optional): 'image', 'pdf-and-image', etc.
+                - leaderboard_show (int, optional): Número de mejores entregas a mostrar
+        
+        Returns:
+            Response: JSON response con resultado de la operación
+        """
+        # pylint: disable=import-outside-toplevel
+        from openedx_owly_apis.operations.courses import add_ora_content_logic
+        
+        data = request.data
+        result = add_ora_content_logic(
+            vertical_id=data.get('vertical_id'),
+            ora_config=data.get('ora_config'),
+            user_identifier=request.user.id
+        )
+        return Response(result)
