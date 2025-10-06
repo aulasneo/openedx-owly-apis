@@ -2781,50 +2781,53 @@ def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=No
     Args:
         vertical_id (str): The vertical/unit ID where the ORA will be added
         ora_config (dict): Configuration for the ORA component with:
-            - display_name (str): Name/title for the ORA
-            - prompt (str): Question/prompt text for students
-            - rubric (dict): Assessment rubric configuration
-            - assessments (list): List of assessment types (self, peer, staff)
-            - submission_start (str, optional): When submissions can start (ISO datetime)
-            - submission_due (str, optional): When submissions are due (ISO datetime)
-            - file_upload_type (str, optional): 'image', 'pdf-and-image', or None
-            - allow_file_upload (bool, optional): Whether to allow file uploads
-            - allow_text_response (bool, optional): Whether to allow text responses
-            - leaderboard_show (int, optional): Number of top submissions to show
+        
+            * display_name (str): Name/title for the ORA
+            * prompt (str): Question/prompt text for students
+            * rubric (dict): Assessment rubric configuration
+            * assessments (list): List of assessment types (self, peer, staff)
+            * submission_start (str, optional): When submissions can start (ISO datetime)
+            * submission_due (str, optional): When submissions are due (ISO datetime)
+            * file_upload_type (str, optional): 'image', 'pdf-and-image', or None
+            * allow_file_upload (bool, optional): Whether to allow file uploads
+            * allow_text_response (bool, optional): Whether to allow text responses
+            * leaderboard_show (int, optional): Number of top submissions to show
+            
         user_identifier: User creating the ORA
 
     Returns:
         dict: Success/error response with ORA component details
 
-    Example ora_config:
-    {
-        "display_name": "Essay Assignment",
-        "prompt": "Write a 500-word essay on...",
-        "rubric": {
-            "criteria": [
-                {
-                    "name": "Content",
-                    "prompt": "How well does the essay address the topic?",
-                    "options": [
-                        {"name": "Excellent", "points": 4, "explanation": "Thoroughly addresses topic"},
-                        {"name": "Good", "points": 3, "explanation": "Addresses topic well"},
-                        {"name": "Fair", "points": 2, "explanation": "Partially addresses topic"},
-                        {"name": "Poor", "points": 1, "explanation": "Does not address topic"}
-                    ]
-                }
-            ]
-        },
-        "assessments": [
-            {"name": "self", "start": null, "due": null, "must_grade": 1, "must_be_graded_by": 1},
-            {"name": "peer", "start": null, "due": null, "must_grade": 3, "must_be_graded_by": 2}
-        ],
-        "submission_start": "2024-01-01T00:00:00Z",
-        "submission_due": "2024-12-31T23:59:59Z",
-        "allow_text_response": true,
-        "allow_file_upload": false,
-        "file_upload_type": null,
-        "leaderboard_show": 0
-    }
+    Example ora_config::
+
+        {
+            "display_name": "Essay Assignment",
+            "prompt": "Write a 500-word essay on...",
+            "rubric": {
+                "criteria": [
+                    {
+                        "name": "Content",
+                        "prompt": "How well does the essay address the topic?",
+                        "options": [
+                            {"name": "Excellent", "points": 4, "explanation": "Thoroughly addresses topic"},
+                            {"name": "Good", "points": 3, "explanation": "Addresses topic well"},
+                            {"name": "Fair", "points": 2, "explanation": "Partially addresses topic"},
+                            {"name": "Poor", "points": 1, "explanation": "Does not address topic"}
+                        ]
+                    }
+                ]
+            },
+            "assessments": [
+                {"name": "self", "start": null, "due": null, "must_grade": 1, "must_be_graded_by": 1},
+                {"name": "peer", "start": null, "due": null, "must_grade": 3, "must_be_graded_by": 2}
+            ],
+            "submission_start": "2024-01-01T00:00:00Z",
+            "submission_due": "2024-12-31T23:59:59Z",
+            "allow_text_response": true,
+            "allow_file_upload": false,
+            "file_upload_type": null,
+            "leaderboard_show": 0
+        }
     """
 
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
