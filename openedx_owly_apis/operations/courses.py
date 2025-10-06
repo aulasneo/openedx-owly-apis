@@ -2781,7 +2781,7 @@ def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=No
     Args:
         vertical_id (str): The vertical/unit ID where the ORA will be added
         ora_config (dict): Configuration for the ORA component with:
-        
+
             * display_name (str): Name/title for the ORA
             * prompt (str): Question/prompt text for students
             * rubric (dict): Assessment rubric configuration
@@ -2792,7 +2792,7 @@ def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=No
             * allow_file_upload (bool, optional): Whether to allow file uploads
             * allow_text_response (bool, optional): Whether to allow text responses
             * leaderboard_show (int, optional): Number of top submissions to show
-            
+
         user_identifier: User creating the ORA
 
     Returns:

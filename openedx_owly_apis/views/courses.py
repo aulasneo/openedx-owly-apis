@@ -386,7 +386,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         Body parameters:
             vertical_id (str): ID del vertical donde agregar el ORA
             ora_config (dict): Configuración del ORA con:
-            
+
                 * display_name (str): Nombre del ORA
                 * prompt (str): Pregunta/prompt para los estudiantes
                 * rubric (dict): Configuración de la rúbrica de evaluación
