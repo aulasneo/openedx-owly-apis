@@ -2775,9 +2775,9 @@ def list_course_staff_logic(course_id, role_type=None, acting_user_identifier=No
 def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=None) -> dict:
     """
     Add Open Response Assessment (ORA) content component to a vertical in OpenEdX.
-    
+
     ORAs support peer assessment, self assessment, and staff assessment workflows.
-    
+
     Args:
         vertical_id (str): The vertical/unit ID where the ORA will be added
         ora_config (dict): Configuration for the ORA component with:
@@ -2792,10 +2792,10 @@ def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=No
             - allow_text_response (bool, optional): Whether to allow text responses
             - leaderboard_show (int, optional): Number of top submissions to show
         user_identifier: User creating the ORA
-        
+
     Returns:
         dict: Success/error response with ORA component details
-        
+
     Example ora_config:
     {
         "display_name": "Essay Assignment",
@@ -2826,34 +2826,34 @@ def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=No
         "leaderboard_show": 0
     }
     """
-    
+
     from cms.djangoapps.contentstore.xblock_storage_handlers.create_xblock import create_xblock
     from django.contrib.auth import get_user_model
     from xmodule.modulestore.django import modulestore
-    
+
     try:
         logger.info(
             "add_ora_content start vertical_id=%s requested_by=%s config_keys=%s",
             vertical_id, str(user_identifier), list((ora_config or {}).keys())
         )
-        
+
         User = get_user_model()
         acting_user = _get_acting_user(user_identifier)
-        
+
         if not acting_user:
             return {"success": False, "error": "No acting user available"}
-        
+
         store, parent_item, usage_key_str, err = _validate_vertical_id(vertical_id)
         if err:
             return err
-        
+
         # Validate and set defaults for ORA configuration
         if not ora_config:
             ora_config = {}
-            
+
         display_name = ora_config.get('display_name', 'Open Response Assessment')
         prompt = ora_config.get('prompt', 'Enter your response here.')
-        
+
         # Create the ORA XBlock
         component = create_xblock(
             parent_locator=str(parent_item.location),
@@ -2861,36 +2861,36 @@ def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=No
             category='openassessment',  # ORA XBlock category
             display_name=display_name
         )
-        
+
         # Configure ORA-specific settings
         # Basic prompt configuration
         component.prompt = prompt
-        
+
         # Configure submission settings
         submission_start = ora_config.get('submission_start')
         submission_due = ora_config.get('submission_due')
-        
+
         if submission_start:
             component.submission_start = _parse_datetime_for_ora(submission_start)
         if submission_due:
             component.submission_due = _parse_datetime_for_ora(submission_due)
-            
+
         # Configure response types
         component.allow_text_response = ora_config.get('allow_text_response', True)
         component.allow_file_upload = ora_config.get('allow_file_upload', False)
-        
+
         if component.allow_file_upload:
             file_upload_type = ora_config.get('file_upload_type', 'pdf-and-image')
             component.file_upload_type = file_upload_type
-            
+
         # Configure leaderboard
         component.leaderboard_show = ora_config.get('leaderboard_show', 0)
-        
+
         # Configure rubric if provided
         rubric_config = ora_config.get('rubric')
         if rubric_config:
             component.rubric_criteria = _build_ora_rubric(rubric_config)
-            
+
         # Configure assessments workflow
         assessments_config = ora_config.get('assessments', [])
         if assessments_config:
@@ -2906,12 +2906,12 @@ def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=No
                     "must_be_graded_by": 1
                 }
             ]
-            
+
         # Update the component in modulestore
         store.update_item(component, acting_user.id)
-        
+
         logger.info(f"Successfully created ORA component: {component.location}")
-        
+
         return {
             "success": True,
             "component_id": str(component.location),
@@ -2921,7 +2921,7 @@ def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=No
             "assessment_types": [step["name"] for step in component.rubric_assessments],
             "message": "ORA component created successfully"
         }
-        
+
     except Exception as e:
         logger.exception(f"Error creating ORA content: {e}")
         return {
@@ -2936,9 +2936,10 @@ def _parse_datetime_for_ora(date_str):
     """Parse datetime string for ORA components"""
     if not date_str:
         return None
-        
+
     try:
         from datetime import datetime
+
         # Validate that the string is a valid datetime and return it as string
         if date_str.endswith('Z'):
             # Normalize Z to +00:00 for validation
@@ -2960,22 +2961,22 @@ def _parse_datetime_for_ora(date_str):
 def _build_ora_rubric(rubric_config):
     """
     Build rubric criteria for ORA from configuration.
-    
+
     Args:
         rubric_config (dict): Rubric configuration with criteria
-        
+
     Returns:
         list: Formatted rubric criteria for ORA
     """
     criteria = []
-    
+
     for criterion in rubric_config.get('criteria', []):
         criterion_data = {
             "name": criterion.get('name', 'Criterion'),
             "prompt": criterion.get('prompt', 'Evaluate this criterion'),
             "options": []
         }
-        
+
         for option in criterion.get('options', []):
             option_data = {
                 "name": option.get('name', 'Option'),
@@ -2983,24 +2984,24 @@ def _build_ora_rubric(rubric_config):
                 "explanation": option.get('explanation', '')
             }
             criterion_data["options"].append(option_data)
-            
+
         criteria.append(criterion_data)
-        
+
     return criteria
 
 
 def _build_ora_assessments(assessments_config):
     """
     Build assessment steps configuration for ORA.
-    
+
     Args:
         assessments_config (list): List of assessment configurations
-        
+
     Returns:
         list: Formatted assessment steps for ORA rubric_assessments field
     """
     assessment_steps = []
-    
+
     for assessment in assessments_config:
         # Map short names to full ORA assessment names
         assessment_name = assessment.get('name', 'self')
@@ -3012,7 +3013,7 @@ def _build_ora_assessments(assessments_config):
             assessment_name = 'staff-assessment'
         elif assessment_name == 'student-training':
             assessment_name = 'student-training'
-            
+
         assessment_data = {
             "name": assessment_name,
             "start": _parse_datetime_for_ora(assessment.get('start')),
@@ -3020,14 +3021,14 @@ def _build_ora_assessments(assessments_config):
             "must_grade": assessment.get('must_grade', 1),
             "must_be_graded_by": assessment.get('must_be_graded_by', 1)
         }
-        
+
         # Add specific configurations for different assessment types
         if assessment_name == "peer-assessment":
             assessment_data["must_grade"] = assessment.get('must_grade', 3)
             assessment_data["must_be_graded_by"] = assessment.get('must_be_graded_by', 2)
         elif assessment_name == "staff-assessment":
             assessment_data["required"] = assessment.get('required', False)
-            
+
         assessment_steps.append(assessment_data)
-        
+
     return assessment_steps
