@@ -141,6 +141,7 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_courses.delete_xblock_logic = _simple_ret("delete_xblock_logic")
     ops_courses.manage_course_staff_logic = _simple_ret("manage_course_staff_logic")
     ops_courses.list_course_staff_logic = _simple_ret("list_course_staff_logic")
+    ops_courses.add_ora_content_logic = _simple_ret("add_ora_content_logic")
     sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
     stubs.append("openedx_owly_apis.operations.courses")
 
