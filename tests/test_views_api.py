@@ -585,8 +585,7 @@ class TestOpenedXCourseViewSet:
         assert resp.status_code == 200
         assert resp.data["called"] == "grade_ora_content_logic"
         assert resp.data["kwargs"]["grade_data"]["assess_type"] == "regrade"
-        """Test ORA creation with file upload capabilities"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+
         view = OpenedXCourseViewSet.as_view({"post": "add_ora_content"})
 
         # ORA configuration with file upload

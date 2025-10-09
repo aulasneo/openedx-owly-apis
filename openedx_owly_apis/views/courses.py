@@ -466,7 +466,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         from openedx_owly_apis.operations.courses import grade_ora_content_logic
 
         data = request.data
-        
+
         # Support both old format (grade_data) and new simplified format
         grade_data = data.get('grade_data', {})
         if not grade_data:
@@ -477,7 +477,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
                 'overall_feedback': data.get('overall_feedback', ''),
                 'assess_type': data.get('assess_type', 'full-grade')
             }
-        
+
         result = grade_ora_content_logic(
             ora_location=data.get('ora_location'),
             student_username=data.get('student_username'),
@@ -491,15 +491,15 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     def get_ora_details(self, request):
         """
         Get detailed information about an ORA component including rubric structure.
-        
+
         This endpoint provides comprehensive information about an ORA component,
         including the rubric criteria, options, and expected format for grading.
-        
+
         Query Parameters:
             - ora_location (str): ORA XBlock usage key/location identifier
                 Format: "block-v1:ORG+COURSE+RUN+type@openassessment+block@ORA_ID"
                 Example: "block-v1:TestX+CS101+2024+type@openassessment+block@essay_ora"
-        
+
         Returns:
             JSON response containing:
             - success: Boolean indicating operation success
@@ -512,10 +512,10 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
                 - rubric: Complete rubric structure with criteria and options
             - example_options_selected: Example format for grade_ora_content
             - criterion_names: List of criterion names for easy reference
-        
+
         Usage Examples:
             GET /api/v1/owly-courses/content/ora/details/?ora_location=block-v1:...
-            
+
             # Use the returned criterion_names and option names for grading:
             POST /api/v1/owly-courses/content/ora/grade/
             {
@@ -527,7 +527,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
                     }
                 }
             }
-        
+
         Error Scenarios:
             - INVALID_ORA_LOCATION: Malformed ORA location identifier
             - ORA_NOT_FOUND: ORA component doesn't exist
@@ -535,7 +535,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             - PERMISSION_DENIED: User lacks access to view ORA details
         """
         ora_location = request.query_params.get('ora_location')
-        
+
         if not ora_location:
             return Response({
                 'success': False,
@@ -544,12 +544,12 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             }, status=400)
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import get_ora_details_logic
-        
+
         result = get_ora_details_logic(
             ora_location=ora_location,
             user_identifier=request.user.id
         )
-        
+
         status_code = 200 if result.get('success') else 400
         return Response(result, status=status_code)
 
@@ -570,7 +570,8 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             * ora_location (str): ORA XBlock usage key/location
 
         Example request:
-        GET /api/v1/owly-courses/content/ora/submissions/?ora_location=block-v1:Org+Course+Run+type@openassessment+block@ora_id
+        GET /api/v1/owly-courses/content/ora/submissions/
+        ?ora_location=block-v1:Org+Course+Run+type@openassessment+block@ora_id
 
         Example response:
         {
@@ -591,27 +592,28 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             ],
             "message": "Found 2 submissions for this ORA"
         }
-        
+
         Error Scenarios:
             - INVALID_ORA_LOCATION: Malformed ORA location identifier
             - SUBMISSIONS_RETRIEVAL_ERROR: Failed to retrieve submissions
             - PERMISSION_DENIED: User lacks access to view submissions
         """
         ora_location = request.query_params.get('ora_location')
-        
+
         if not ora_location:
             return Response({
                 'success': False,
                 'error': 'ora_location parameter is required',
                 'error_code': 'missing_ora_location'
             }, status=400)
-        
+
+        # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import list_ora_submissions_logic
-        
+
         result = list_ora_submissions_logic(
             ora_location=ora_location,
             user_identifier=request.user.id
         )
-        
+
         status_code = 200 if result.get('success') else 400
         return Response(result, status=status_code)
