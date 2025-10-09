@@ -474,6 +474,117 @@ class TestOpenedXCourseViewSet:
         assert resp.data["kwargs"]["ora_config"]["assessments"][0]["name"] == "self"
 
     def test_add_ora_content_with_file_upload(self, api_factory):
+        """Test adding ORA content with file upload configuration"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "add_ora_content"})
+        req = api_factory.post(
+            "/owly-courses/content/ora/",
+            {
+                "vertical_id": "block-v1:TestX+CS101+2024+type@vertical+block@unit1",
+                "ora_config": {
+                    "display_name": "Project Upload ORA",
+                    "prompt": "Upload your final project",
+                    "allow_text_response": True,
+                    "allow_file_upload": True,
+                    "file_upload_type": "pdf-and-image",
+                    "assessments": [
+                        {"name": "peer", "must_grade": 1, "must_be_graded_by": 2}
+                    ]
+                }
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "add_ora_content_logic"
+
+    def test_grade_ora_content_calls_logic(self, api_factory):
+        """Test grading an ORA submission"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "grade_ora_content"})
+        req = api_factory.post(
+            "/owly-courses/content/ora/grade/",
+            {
+                "ora_location": "block-v1:TestX+CS101+2024+type@openassessment+block@essay_ora",
+                "submission_uuid": "12345678-1234-5678-9abc-123456789abc",
+                "grade_data": {
+                    "options_selected": {
+                        "Content Quality": "Excellent",
+                        "Writing Clarity": "Good",
+                        "Critical Thinking": "Excellent"
+                    },
+                    "criterion_feedback": {
+                        "Content Quality": "Demonstrates deep understanding",
+                        "Writing Clarity": "Generally clear but some areas need improvement"
+                    },
+                    "overall_feedback": "Strong analytical essay with excellent content",
+                    "assess_type": "full-grade"
+                }
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)  # Staff permissions required for grading
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "grade_ora_content_logic"
+        # Verify the parameters passed to the logic function
+        assert resp.data["kwargs"]["ora_location"] == "block-v1:TestX+CS101+2024+type@openassessment+block@essay_ora"
+        assert resp.data["kwargs"]["submission_uuid"] == "12345678-1234-5678-9abc-123456789abc"
+        assert "grade_data" in resp.data["kwargs"]
+        assert resp.data["kwargs"]["grade_data"]["assess_type"] == "full-grade"
+
+    def test_grade_ora_content_minimal_data(self, api_factory):
+        """Test grading ORA with minimal required data"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "grade_ora_content"})
+        req = api_factory.post(
+            "/owly-courses/content/ora/grade/",
+            {
+                "ora_location": "block-v1:TestX+CS101+2024+type@openassessment+block@simple_ora",
+                "submission_uuid": "87654321-4321-8765-dcba-987654321abc",
+                "grade_data": {
+                    "options_selected": {
+                        "Overall Quality": "Good"
+                    }
+                }
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "grade_ora_content_logic"
+
+    def test_grade_ora_content_regrade(self, api_factory):
+        """Test regrading an ORA submission"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "grade_ora_content"})
+        req = api_factory.post(
+            "/owly-courses/content/ora/grade/",
+            {
+                "ora_location": "block-v1:TestX+CS101+2024+type@openassessment+block@essay_ora",
+                "submission_uuid": "regrade-uuid-1234-5678-9abc-123456789abc",
+                "grade_data": {
+                    "options_selected": {
+                        "Content Quality": "Excellent",
+                        "Writing Clarity": "Excellent"
+                    },
+                    "overall_feedback": "Improved significantly after revision",
+                    "assess_type": "regrade"
+                }
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "grade_ora_content_logic"
+        assert resp.data["kwargs"]["grade_data"]["assess_type"] == "regrade"
         """Test ORA creation with file upload capabilities"""
         from openedx_owly_apis.views.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_ora_content"})

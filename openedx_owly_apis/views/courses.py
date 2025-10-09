@@ -411,3 +411,207 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
         return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='content/ora/grade',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def grade_ora_content(self, request):
+        """
+        Grade an ORA (Open Response Assessment) submission using staff assessment.
+
+        This endpoint allows staff members to grade student submissions for ORA components
+        using OpenedX's internal staff grading functionality.
+
+        Body parameters:
+            * ora_location (str): ORA XBlock usage key/location
+            * student_username (str): Username of the student to grade (alternative to submission_uuid)
+            * submission_uuid (str): UUID of the submission to grade (alternative to student_username)
+            * options_selected (dict): Selected rubric options for each criterion
+            * overall_feedback (str): Optional overall feedback for the submission
+            * criterion_feedback (dict): Optional feedback for each criterion
+            * assess_type (str): 'full-grade' or 'regrade' (default: 'full-grade')
+
+        Note: Either student_username OR submission_uuid must be provided, not both.
+
+        Example request body (simplified format):
+        {
+            "ora_location": "block-v1:Org+Course+Run+type@openassessment+block@ora_id",
+            "student_username": "student123",
+            "options_selected": {
+                "Criterion 1": "Excellent",
+                "Criterion 2": "Good"
+            },
+            "overall_feedback": "Overall excellent submission"
+        }
+        Legacy format (still supported):
+        {
+            "ora_location": "block-v1:Org+Course+Run+type@openassessment+block@ora_id",
+            "submission_uuid": "submission-uuid-here",
+            "grade_data": {
+                "options_selected": {
+                    "Criterion 1": "Excellent",
+                    "Criterion 2": "Good"
+                },
+                "overall_feedback": "Overall excellent submission"
+            }
+        }
+
+        Returns:
+            Response: JSON response with grading result including assessment ID and success status
+        """
+        # pylint: disable=import-outside-toplevel
+        from openedx_owly_apis.operations.courses import grade_ora_content_logic
+
+        data = request.data
+        
+        # Support both old format (grade_data) and new simplified format
+        grade_data = data.get('grade_data', {})
+        if not grade_data:
+            # New simplified format
+            grade_data = {
+                'options_selected': data.get('options_selected', {}),
+                'criterion_feedback': data.get('criterion_feedback', {}),
+                'overall_feedback': data.get('overall_feedback', ''),
+                'assess_type': data.get('assess_type', 'full-grade')
+            }
+        
+        result = grade_ora_content_logic(
+            ora_location=data.get('ora_location'),
+            student_username=data.get('student_username'),
+            submission_uuid=data.get('submission_uuid'),
+            grade_data=grade_data,
+            user_identifier=request.user.id
+        )
+        return Response(result)
+
+    @action(detail=False, methods=['get'], url_path='content/ora/details')
+    def get_ora_details(self, request):
+        """
+        Get detailed information about an ORA component including rubric structure.
+        
+        This endpoint provides comprehensive information about an ORA component,
+        including the rubric criteria, options, and expected format for grading.
+        
+        Query Parameters:
+            - ora_location (str): ORA XBlock usage key/location identifier
+                Format: "block-v1:ORG+COURSE+RUN+type@openassessment+block@ORA_ID"
+                Example: "block-v1:TestX+CS101+2024+type@openassessment+block@essay_ora"
+        
+        Returns:
+            JSON response containing:
+            - success: Boolean indicating operation success
+            - ora_info: Detailed ORA component information including:
+                - ora_location: The ORA component location
+                - display_name: Component title
+                - prompt: ORA instructions for students
+                - submission_start/due: Deadline information
+                - assessment_steps: Available assessment types
+                - rubric: Complete rubric structure with criteria and options
+            - example_options_selected: Example format for grade_ora_content
+            - criterion_names: List of criterion names for easy reference
+        
+        Usage Examples:
+            GET /api/v1/owly-courses/content/ora/details/?ora_location=block-v1:...
+            
+            # Use the returned criterion_names and option names for grading:
+            POST /api/v1/owly-courses/content/ora/grade/
+            {
+                "ora_location": "block-v1:...",
+                "submission_uuid": "12345678-1234-5678-9abc-123456789abc",
+                "grade_data": {
+                    "options_selected": {
+                        "criterion_name_from_response": "option_name_from_response"
+                    }
+                }
+            }
+        
+        Error Scenarios:
+            - INVALID_ORA_LOCATION: Malformed ORA location identifier
+            - ORA_NOT_FOUND: ORA component doesn't exist
+            - NOT_ORA_XBLOCK: Component exists but isn't an ORA
+            - PERMISSION_DENIED: User lacks access to view ORA details
+        """
+        ora_location = request.query_params.get('ora_location')
+        
+        if not ora_location:
+            return Response({
+                'success': False,
+                'error': 'ora_location parameter is required',
+                'error_code': 'missing_ora_location'
+            }, status=400)
+        # pylint: disable=import-outside-toplevel
+        from openedx_owly_apis.operations.courses import get_ora_details_logic
+        
+        result = get_ora_details_logic(
+            ora_location=ora_location,
+            user_identifier=request.user.id
+        )
+        
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='content/ora/submissions',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def list_ora_submissions(self, request):
+        """
+        List all submissions for a specific ORA component to help identify which students have submitted responses.
+
+        This endpoint helps staff identify which students have submitted responses to an ORA,
+        making it easier to know who can be graded.
+
+        Query parameters:
+            * ora_location (str): ORA XBlock usage key/location
+
+        Example request:
+        GET /api/v1/owly-courses/content/ora/submissions/?ora_location=block-v1:Org+Course+Run+type@openassessment+block@ora_id
+
+        Example response:
+        {
+            "success": true,
+            "ora_location": "block-v1:Org+Course+Run+type@openassessment+block@ora_id",
+            "total_submissions": 2,
+            "submissions": [
+                {
+                    "submission_uuid": "f0973a23-0e98-4642-b183-df29acf6339a",
+                    "student_id": "1",
+                    "student_username": "student1",
+                    "student_email": "student1@example.com",
+                    "submitted_at": "2025-10-06T20:30:00Z",
+                    "created_at": "2025-10-06T20:29:00Z",
+                    "attempt_number": 1,
+                    "status": "completed"
+                }
+            ],
+            "message": "Found 2 submissions for this ORA"
+        }
+        
+        Error Scenarios:
+            - INVALID_ORA_LOCATION: Malformed ORA location identifier
+            - SUBMISSIONS_RETRIEVAL_ERROR: Failed to retrieve submissions
+            - PERMISSION_DENIED: User lacks access to view submissions
+        """
+        ora_location = request.query_params.get('ora_location')
+        
+        if not ora_location:
+            return Response({
+                'success': False,
+                'error': 'ora_location parameter is required',
+                'error_code': 'missing_ora_location'
+            }, status=400)
+        
+        from openedx_owly_apis.operations.courses import list_ora_submissions_logic
+        
+        result = list_ora_submissions_logic(
+            ora_location=ora_location,
+            user_identifier=request.user.id
+        )
+        
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
