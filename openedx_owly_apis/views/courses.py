@@ -426,41 +426,45 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         using OpenedX's internal staff grading functionality.
 
         Body parameters:
-            * ora_location (str): ORA XBlock usage key/location
-            * student_username (str): Username of the student to grade (alternative to submission_uuid)
-            * submission_uuid (str): UUID of the submission to grade (alternative to student_username)
-            * options_selected (dict): Selected rubric options for each criterion
-            * overall_feedback (str): Optional overall feedback for the submission
-            * criterion_feedback (dict): Optional feedback for each criterion
-            * assess_type (str): 'full-grade' or 'regrade' (default: 'full-grade')
+            ora_location (str): ORA XBlock usage key/location
+            student_username (str): Username of the student to grade (alternative to submission_uuid)
+            submission_uuid (str): UUID of the submission to grade (alternative to student_username)
+            options_selected (dict): Selected rubric options for each criterion
+            overall_feedback (str): Optional overall feedback for the submission
+            criterion_feedback (dict): Optional feedback for each criterion
+            assess_type (str): 'full-grade' or 'regrade' (default: 'full-grade')
 
-        Note: Either student_username OR submission_uuid must be provided, not both.
+        Note:
+            Either student_username OR submission_uuid must be provided, not both.
 
-        Example request body (simplified format):
-        {
-            "ora_location": "block-v1:Org+Course+Run+type@openassessment+block@ora_id",
-            "student_username": "student123",
-            "options_selected": {
-                "Criterion 1": "Excellent",
-                "Criterion 2": "Good"
-            },
-            "overall_feedback": "Overall excellent submission"
-        }
-        Legacy format (still supported):
-        {
-            "ora_location": "block-v1:Org+Course+Run+type@openassessment+block@ora_id",
-            "submission_uuid": "submission-uuid-here",
-            "grade_data": {
+        Example request body (simplified format)::
+
+            {
+                "ora_location": "block-v1:Org+Course+Run+type@openassessment+block@ora_id",
+                "student_username": "student123",
                 "options_selected": {
                     "Criterion 1": "Excellent",
                     "Criterion 2": "Good"
                 },
                 "overall_feedback": "Overall excellent submission"
             }
-        }
+
+        Legacy format (still supported)::
+
+            {
+                "ora_location": "block-v1:Org+Course+Run+type@openassessment+block@ora_id",
+                "submission_uuid": "submission-uuid-here",
+                "grade_data": {
+                    "options_selected": {
+                        "Criterion 1": "Excellent",
+                        "Criterion 2": "Good"
+                    },
+                    "overall_feedback": "Overall excellent submission"
+                }
+            }
 
         Returns:
-            Response: JSON response with grading result including assessment ID and success status
+            JSON response with grading result including assessment ID and success status
         """
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import grade_ora_content_logic
@@ -496,37 +500,43 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         including the rubric criteria, options, and expected format for grading.
 
         Query Parameters:
-            - ora_location (str): ORA XBlock usage key/location identifier
+            ora_location (str): ORA XBlock usage key/location identifier
+
                 Format: "block-v1:ORG+COURSE+RUN+type@openassessment+block@ORA_ID"
+
                 Example: "block-v1:TestX+CS101+2024+type@openassessment+block@essay_ora"
 
         Returns:
             JSON response containing:
+
             - success: Boolean indicating operation success
             - ora_info: Detailed ORA component information including:
+
                 - ora_location: The ORA component location
                 - display_name: Component title
                 - prompt: ORA instructions for students
                 - submission_start/due: Deadline information
                 - assessment_steps: Available assessment types
                 - rubric: Complete rubric structure with criteria and options
+
             - example_options_selected: Example format for grade_ora_content
             - criterion_names: List of criterion names for easy reference
 
         Usage Examples:
             GET /api/v1/owly-courses/content/ora/details/?ora_location=block-v1:...
 
-            # Use the returned criterion_names and option names for grading:
-            POST /api/v1/owly-courses/content/ora/grade/
-            {
-                "ora_location": "block-v1:...",
-                "submission_uuid": "12345678-1234-5678-9abc-123456789abc",
-                "grade_data": {
-                    "options_selected": {
-                        "criterion_name_from_response": "option_name_from_response"
+            Use the returned criterion_names and option names for grading::
+
+                POST /api/v1/owly-courses/content/ora/grade/
+                {
+                    "ora_location": "block-v1:...",
+                    "submission_uuid": "12345678-1234-5678-9abc-123456789abc",
+                    "grade_data": {
+                        "options_selected": {
+                            "criterion_name_from_response": "option_name_from_response"
+                        }
                     }
                 }
-            }
 
         Error Scenarios:
             - INVALID_ORA_LOCATION: Malformed ORA location identifier
@@ -567,31 +577,33 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         making it easier to know who can be graded.
 
         Query parameters:
-            * ora_location (str): ORA XBlock usage key/location
+            ora_location (str): ORA XBlock usage key/location
 
-        Example request:
-        GET /api/v1/owly-courses/content/ora/submissions/
-        ?ora_location=block-v1:Org+Course+Run+type@openassessment+block@ora_id
+        Example request::
 
-        Example response:
-        {
-            "success": true,
-            "ora_location": "block-v1:Org+Course+Run+type@openassessment+block@ora_id",
-            "total_submissions": 2,
-            "submissions": [
-                {
-                    "submission_uuid": "f0973a23-0e98-4642-b183-df29acf6339a",
-                    "student_id": "1",
-                    "student_username": "student1",
-                    "student_email": "student1@example.com",
-                    "submitted_at": "2025-10-06T20:30:00Z",
-                    "created_at": "2025-10-06T20:29:00Z",
-                    "attempt_number": 1,
-                    "status": "completed"
-                }
-            ],
-            "message": "Found 2 submissions for this ORA"
-        }
+            GET /api/v1/owly-courses/content/ora/submissions/
+            ?ora_location=block-v1:Org+Course+Run+type@openassessment+block@ora_id
+
+        Example response::
+
+            {
+                "success": true,
+                "ora_location": "block-v1:Org+Course+Run+type@openassessment+block@ora_id",
+                "total_submissions": 2,
+                "submissions": [
+                    {
+                        "submission_uuid": "f0973a23-0e98-4642-b183-df29acf6339a",
+                        "student_id": "1",
+                        "student_username": "student1",
+                        "student_email": "student1@example.com",
+                        "submitted_at": "2025-10-06T20:30:00Z",
+                        "created_at": "2025-10-06T20:29:00Z",
+                        "attempt_number": 1,
+                        "status": "completed"
+                    }
+                ],
+                "message": "Found 2 submissions for this ORA"
+            }
 
         Error Scenarios:
             - INVALID_ORA_LOCATION: Malformed ORA location identifier
