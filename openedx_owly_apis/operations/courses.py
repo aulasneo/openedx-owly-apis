@@ -3073,116 +3073,96 @@ def get_submission_uuid_for_student(ora_location: str, student_username: str) ->
 
         # Try to get the submission for this specific student using OpenedX API
         try:
-            # The correct way is to use get_submissions() with the item_id (ORA location)
-            # and then filter by student_id
-            course_id = str(ora_usage_key.course_key)
-            item_id = str(ora_usage_key)
+            # Try direct database query first (most reliable method)
+            from submissions.models import StudentItem, Submission
 
             logger.info(
-                f"Looking for submissions in course: {course_id}, item: {item_id}, "
-                f"student_id: {student_user.id}"
-            )
-            # Use the submissions API to get submissions for this ORA
-            submission = submissions_api.get_submission_and_student(
-                item_id,  # This should be the ORA usage key as string
-                student_user.id  # The student's user ID
+                f"Looking for submissions for student '{student_username}' (ID: {student_user.id}) "
+                f"in ORA '{ora_location}'"
             )
 
-            if submission:
-                logger.info(
-                    f"Found submission for student '{student_username}': {submission.get('uuid')}"
+            # First, get the StudentItem for this student and ORA
+            try:
+                student_item = StudentItem.objects.get(
+                    student_id=str(student_user.id),
+                    course_id=str(ora_usage_key.course_key),
+                    item_id=str(ora_usage_key),
+                    item_type='openassessment'
                 )
-                return submission.get('uuid')
-            else:
+                logger.info(f"Found StudentItem for student '{student_username}'")
+
+                # Now get submissions for this student item
+                submissions = Submission.objects.filter(student_item=student_item).order_by('-created_at')
+
+                if submissions.exists():
+                    submission = submissions.first()
+                    logger.info(
+                        f"Found submission for student '{student_username}': {submission.uuid}"
+                    )
+                    return submission.uuid
+                else:
+                    logger.warning(
+                        f"No submissions found for StudentItem for student '{student_username}'"
+                    )
+
+            except StudentItem.DoesNotExist:
                 logger.warning(
-                    f"No submission returned for student '{student_username}' in ORA '{ora_location}'"
+                    f"No StudentItem found for student '{student_username}' in ORA '{ora_location}'. "
+                    f"This likely means the student has not submitted a response to this ORA yet."
                 )
 
         except Exception as e:
             logger.error(
-                f"Error calling get_submission_and_student for '{student_username}': {e}"
+                f"Error with database query for student '{student_username}': {e}"
             )
 
-            # Try alternative method - use get_all_submissions and filter
+            # Try alternative method - use submissions API
             try:
                 logger.info(
-                    "Trying alternative method - get all submissions for ORA"
+                    "Trying alternative method - submissions API"
                 )
 
-                # Try to get all submissions for this ORA and filter by student
-                from submissions.models import StudentItem, Submission
-
-                # First, get or create the StudentItem for this student and ORA
+                # Use get_submissions API method with correct parameters
+                # The OpenEdX submissions API get_submissions method signature:
+                # get_submissions(course_id, item_id, item_type, limit=None)
                 try:
-                    student_item = StudentItem.objects.get(
-                        student_id=str(student_user.id),
-                        course_id=str(ora_usage_key.course_key),
-                        item_id=str(ora_usage_key),
+                    course_id = str(ora_usage_key.course_key)
+                    item_id = str(ora_usage_key)
+                    
+                    submissions_list = submissions_api.get_submissions(
+                        course_id=course_id,
+                        item_id=item_id,
                         item_type='openassessment'
                     )
 
-                    # Now get submissions for this student item
-                    submissions = Submission.objects.filter(student_item=student_item)
-
-                    if submissions.exists():
-                        submission = submissions.first()
-                        return submission.uuid
-                    else:
-                        logger.warning(
-                            f"No submissions found for StudentItem for student '{student_username}'"
-                        )
-
-                except StudentItem.DoesNotExist:
-                    logger.warning(
-                        f"No StudentItem found for student '{student_username}' in ORA '{ora_location}'"
-                    )
-
-            except Exception as db_error:
-                logger.error(
-                    f"Database query also failed for student '{student_username}': {db_error}"
-                )
-
-        # Try one more method - use submissions API directly with proper parameters
-        try:
-            logger.info(
-                "Trying final method - submissions API with course/item filtering"
-            )
-
-            # Use submissions API to get submissions for this specific item and student
-            # According to the error, get_submissions doesn't accept course_id parameter
-            import submissions.api as sub_api
-
-            # Try the correct API method - get_submissions for a specific item
-            submissions_list = sub_api.get_submissions(
-                item_id=str(ora_usage_key),
-                limit=100  # Reasonable limit
-            )
-
-            logger.info(
-                f"Found {len(submissions_list)} total submissions for ORA"
-            )
-
-            # Filter by student ID
-            for submission in submissions_list:
-                logger.info(
-                    f"Checking submission: student_id={submission.get('student_id')}, "
-                    f"target={str(student_user.id)}"
-                )
-                if submission.get('student_id') == str(student_user.id):
                     logger.info(
-                        f"Found submission via API filtering for student '{student_username}': {submission.get('uuid')}"
+                        f"Found {len(submissions_list)} total submissions for ORA via API"
                     )
-                    return submission.get('uuid')
 
-            logger.warning(
-                f"No submission found in API results for student '{student_username}' "
-                f"among {len(submissions_list)} submissions"
-            )
+                    # Filter by student ID
+                    for submission in submissions_list:
+                        logger.debug(
+                            f"Checking submission: student_id={submission.get('student_id')}, "
+                            f"target={str(student_user.id)}"
+                        )
+                        if submission.get('student_id') == str(student_user.id):
+                            logger.info(
+                                f"Found submission via API filtering for student '{student_username}': {submission.get('uuid')}"
+                            )
+                            return submission.get('uuid')
 
-        except Exception as api_error:
-            logger.error(
-                f"Final API method also failed for student '{student_username}': {api_error}"
-            )
+                    logger.warning(
+                        f"No submission found in API results for student '{student_username}' "
+                        f"among {len(submissions_list)} submissions"
+                    )
+
+                except Exception as api_error:
+                    logger.error(f"Submissions API call failed: {api_error}")
+
+            except Exception as fallback_error:
+                logger.error(
+                    f"Fallback API method also failed for student '{student_username}': {fallback_error}"
+                )
 
         logger.warning(
             f"No submission found for student '{student_username}' in ORA '{ora_location}' after trying all methods"
@@ -3217,7 +3197,6 @@ def list_ora_submissions_logic(ora_location: str, user_identifier=None) -> dict:
         from opaque_keys.edx.keys import UsageKey
         from submissions import api as submissions_api
 
-        User = get_user_model()
         acting_user = _get_acting_user(user_identifier)
         logger.info(
             f"list_ora_submissions_logic: User {acting_user.username} requesting submissions for {ora_location}"
@@ -3254,117 +3233,15 @@ def list_ora_submissions_logic(ora_location: str, user_identifier=None) -> dict:
                 f"Found {submissions.count()} submissions for ORA"
             )
 
-            # Process each submission and get student information
+            # Process each submission and collect student information
             for submission in submissions:
-                student_id = submission.student_item.student_id
-                logger.info(
-                    f"Processing submission {submission.uuid} for student_id {student_id}"
-                )
-
-                # Try multiple methods to get the real student information
-                try:
-                    # Method 1: Use submissions API to get submission with student data
-                    submission_data = submissions_api.get_submission_and_student(submission.uuid)
-
-                    if submission_data:
-                        logger.info(
-                            f"Retrieved submission data from API: {submission_data}"
-                        )
-
-                        # Try to extract student info from different possible locations
-                        actual_student_id = None
-                        if 'student_item' in submission_data:
-                            actual_student_id = submission_data['student_item'].get('student_id')
-                        elif 'student_id' in submission_data:
-                            actual_student_id = submission_data.get('student_id')
-
-                        logger.info(
-                            f"Extracted student_id from API: {actual_student_id}"
-                        )
-
-                        if actual_student_id:
-                            try:
-                                # Try to get the user with the actual student ID
-                                student_user = User.objects.get(id=int(actual_student_id))
-                                submissions_list.append({
-                                    'submission_uuid': submission.uuid,
-                                    'student_id': student_user.id,
-                                    'student_username': student_user.username,
-                                    'student_email': student_user.email,
-                                    'student_full_name': (
-                                        f"{student_user.first_name} {student_user.last_name}"
-                                    ).strip(),
-                                    'submitted_at': submission.created_at.isoformat(),
-                                    'status': submission.status if hasattr(submission, 'status') else 'submitted'
-                                })
-                                logger.info(
-                                    f"Added submission for student: {student_user.username} (ID: {student_user.id})"
-                                )
-                                continue
-
-                            except (User.DoesNotExist, ValueError, TypeError) as user_error:
-                                logger.warning(
-                                    f"Student user not found for ID {actual_student_id}: {user_error}"
-                                )
-
-                    # Method 2: Try to reverse lookup the hashed student_id
-                    # The student_id might be stored in a different format, let's try direct lookup by username hash
-                    logger.info(
-                        f"Attempting reverse lookup for hashed student_id: {student_id}"
-                    )
-
-                    # Try to find user by checking if the student_id matches any known pattern
-                    # Sometimes OpenedX stores the actual username or user ID in different places
-                    potential_users = User.objects.all()[:50]  # Limit to avoid performance issues
-
-                    for user in potential_users:
-                        # Check if this user has submissions in this course
-                        user_student_items = StudentItem.objects.filter(
-                            course_id=str(ora_usage_key.course_key),
-                            item_id=str(ora_usage_key),
-                            item_type='openassessment',
-                            student_id=student_id  # Check if this matches the hashed ID
-                        )
-
-                        if user_student_items.exists():
-                            # Found a match - this user has the hashed student_id
-                            submissions_list.append({
-                                'submission_uuid': submission.uuid,
-                                'student_id': user.id,
-                                'student_username': user.username,
-                                'student_email': user.email,
-                                'student_full_name': f"{user.first_name} {user.last_name}".strip(),
-                                'submitted_at': submission.created_at.isoformat() if submission.created_at else None,
-                                'status': submission.status if hasattr(submission, 'status') else 'submitted'
-                            })
-                            logger.info(
-                                f"Found user through reverse lookup: {user.username} (ID: {user.id})"
-                            )
-                            break
-                    else:
-                        # No user found through reverse lookup either
-                        logger.warning(
-                            f"Could not find user for submission {submission.uuid}"
-                        )
-                        raise Exception("User not found through any method")
-
-                except Exception as api_error:
-                    logger.warning(
-                        f"Error getting student info for {submission.uuid}: {api_error}"
-                    )
-
-                # Fallback: if API method fails, add with limited info
-                logger.warning(
-                    f"Using fallback data for submission {submission.uuid}"
-                )
                 submissions_list.append({
                     'submission_uuid': submission.uuid,
-                    'student_id': student_id,  # This might be a hash
-                    'student_username': f'Student (ID: {student_id})',
-                    'student_email': 'unknown@example.com',
-                    'student_full_name': 'Unknown Student',
-                    'submitted_at': submission.created_at.isoformat() if submission.created_at else None,
-                    'status': submission.status if hasattr(submission, 'status') else 'submitted'
+                    'student_id': acting_user.id,
+                    'student_username': acting_user.username,
+                    'student_email': acting_user.email,
+                    'submitted_at': submission.created_at.isoformat(),
+                    'status': submission.status
                 })
 
         except Exception as e:
@@ -3754,7 +3631,6 @@ def grade_ora_content_logic(
             'error_code': 'unexpected_error'
         }
 
-
 def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
     """
     Get detailed information about an ORA component including rubric and submission details.
@@ -3768,7 +3644,11 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
     """
     try:
         acting_user = _get_acting_user(user_identifier)
-        logger.info(f"get_ora_details_logic: User {acting_user.username} requesting ORA details for {ora_location}")
+        logger.info(
+            "get_ora_details_logic: user=%s ora_location=%s",
+            getattr(acting_user, 'username', None),
+            ora_location,
+        )
 
         # Import OpenedX modules lazily to avoid initialization issues
         from urllib.parse import unquote
@@ -3776,146 +3656,144 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
         from opaque_keys.edx.keys import UsageKey
         from xmodule.modulestore.django import modulestore
 
-        # Clean and parse the ORA location key
-        # Handle URL encoding and spaces that might appear in the key
+        # Helpers
+        def _parse_usage_key(raw: str):
+            # Handle URL parameter parsing: + signs become spaces in URL parameters
+            # We need to convert them back to + for OpenedX UsageKey format
+            cleaned = unquote(raw)  # First decode any URL encoding (%2B -> +)
+            cleaned = cleaned.replace(' ', '+')  # Convert spaces back to + (from URL parameter parsing)
+            logger.info("Cleaned ORA location: '%s' -> '%s'", raw, cleaned)
+
+            # Validate it looks like a proper UsageKey format
+            if not cleaned.startswith('block-v1:') or '+type@' not in cleaned:
+                raise ValueError(
+                    f"Invalid UsageKey format. "
+                    f"Expected: block-v1:ORG+COURSE+RUN+type@openassessment+block@ID "
+                    f"Received: {cleaned}"
+                )
+
+            key = UsageKey.from_string(cleaned)
+            # Guard against BlockKey (missing course context)
+            if not hasattr(key, 'course_key'):
+                raise ValueError(
+                    "Received a BlockKey without course context. "
+                    f"Expected: block-v1:ORG+COURSE+RUN+type@openassessment+block@ID "
+                    f"Received: {cleaned}"
+                )
+            return key
+
+        def _extract_rubric_criteria(xblock) -> list:
+            """Return a list of rubric criteria dicts if available; [] otherwise."""
+            # Preferred attributes
+            for attr in ('rubric_criteria', 'rubric_criteria_with_labels'):
+                data = getattr(xblock, attr, None)
+                if data:
+                    return data if isinstance(data, list) else data.get('criteria', [])
+
+            # Method-based accessor
+            get_rubric = getattr(xblock, 'get_rubric', None)
+            if callable(get_rubric):
+                try:
+                    rubric_dict = get_rubric()
+                    if isinstance(rubric_dict, dict):
+                        crit = rubric_dict.get('criteria', [])
+                        if crit:
+                            return crit
+                except Exception as err:
+                    logger.info("get_rubric() failed: %s", err)
+
+            # Fallback attributes
+            data = getattr(xblock, 'rubric', None)
+            if isinstance(data, dict):
+                return data.get('criteria', [])
+            if isinstance(data, list):
+                return data
+
+            # Last-ditch attempts on older fields
+            if hasattr(xblock, 'criteria'):
+                crit = getattr(xblock, 'criteria')
+                if isinstance(crit, list) and crit:
+                    return crit
+            if hasattr(xblock, 'rubric_criteria_values'):
+                crit = getattr(xblock, 'rubric_criteria_values')
+                if isinstance(crit, list) and crit:
+                    return crit
+            return []
+
+        # 1) Parse key safely
         try:
-            # First try URL decoding
-            cleaned_location = unquote(ora_location)
-            # Replace any remaining spaces with + signs (common in OpenedX keys)
-            cleaned_location = cleaned_location.replace(' ', '+')
-            logger.info(f"Cleaned ORA location: '{ora_location}' -> '{cleaned_location}'")
-
-            ora_usage_key = UsageKey.from_string(cleaned_location)
+            ora_usage_key = _parse_usage_key(ora_location)
         except Exception as e:
-            logger.error(f"Invalid ORA location key '{ora_location}' (cleaned: '{cleaned_location}'): {e}")
+            logger.error("Invalid ORA location key: %s", e)
             return {
                 'success': False,
-                'error': f'Invalid ORA location: {str(e)}',
-                'error_code': 'invalid_ora_location'
+                'error': str(e),
+                'error_code': 'invalid_ora_location',
+                'provided': ora_location,
             }
 
-        # Get the ORA XBlock from modulestore
-        store = modulestore()
-        ora_xblock = store.get_item(ora_usage_key)
-
-        if not ora_xblock:
+        # 2) Load XBlock
+        try:
+            store = modulestore()
+            ora_xblock = store.get_item(ora_usage_key)
+        except Exception as e:
+            logger.error("Could not load ORA XBlock for %s: %s", ora_usage_key, e)
             return {
                 'success': False,
-                'error': f'ORA component not found at {ora_location}',
-                'error_code': 'ora_not_found'
+                'error': f'ORA component not found: {str(e)}',
+                'error_code': 'ora_not_found',
+                'ora_location': ora_location,
             }
 
-        # Verify it's actually an ORA component
-        if not hasattr(ora_xblock, 'assessment_steps') or ora_xblock.category != 'openassessment':
+        if not getattr(ora_xblock, 'category', None) == 'openassessment':
             return {
                 'success': False,
                 'error': f'XBlock at {ora_location} is not an ORA component',
-                'error_code': 'not_ora_xblock'
+                'error_code': 'not_ora_xblock',
             }
 
-        # Get rubric configuration - try multiple approaches
-        logger.info(
-            f"Analyzing ORA XBlock attributes: "
-            f"{[attr for attr in dir(ora_xblock) if 'rubric' in attr.lower() or 'criteria' in attr.lower()]}"
-        )
+        # 3) Extract rubric
+        rubric_criteria = _extract_rubric_criteria(ora_xblock)
+        logger.info("Extracted rubric criteria count: %s", len(rubric_criteria or []))
 
-        # Try to get the actual rubric criteria (not assessment types)
-        rubric_data = getattr(ora_xblock, 'rubric_criteria', None)
-        if not rubric_data:
-            rubric_data = getattr(ora_xblock, 'rubric_criteria_with_labels', None)
-
-        # If still no luck, try the get_rubric method
-        if not rubric_data:
-            try:
-                get_rubric_method = getattr(ora_xblock, 'get_rubric', None)
-                if get_rubric_method:
-                    rubric_dict = get_rubric_method()
-                    if isinstance(rubric_dict, dict):
-                        rubric_data = rubric_dict.get('criteria', [])
-                    logger.info(f"Got rubric from get_rubric(): {rubric_data}")
-            except Exception as e:
-                logger.warning(f"Error calling get_rubric(): {e}")
-
-        # Last resort: try the old attributes but only as fallback
-        if not rubric_data:
-            rubric_data = getattr(ora_xblock, 'rubric', None)
-            if not rubric_data:
-                rubric_data = getattr(ora_xblock, 'rubric_assessments', None)
-
-        logger.info(f"Rubric data type: {type(rubric_data)}, value: {rubric_data}")
-
-        # Extract detailed rubric information
-        criteria_details = []
-
-        # Handle different rubric data structures
-        criteria_list = []
-        if isinstance(rubric_data, dict):
-            # If rubric_data is a dict, get criteria from it
-            criteria_list = rubric_data.get('criteria', [])
-            logger.info(f"Got criteria from dict: {criteria_list}")
-        elif isinstance(rubric_data, list):
-            # If rubric_data is a list, it might be the criteria directly
-            criteria_list = rubric_data
-            logger.info(f"Using rubric_data as criteria list: {criteria_list}")
-        else:
-            # Try to get criteria directly from the xblock
-            criteria_list = getattr(ora_xblock, 'criteria', [])
-            logger.info(f"Got criteria directly from xblock: {criteria_list}")
-
-            # If still empty, try getting from rubric_criteria_values or similar
-            if not criteria_list:
-                criteria_list = getattr(ora_xblock, 'rubric_criteria_values', [])
-                logger.info(f"Got criteria from rubric_criteria_values: {criteria_list}")
-
-        logger.info(f"Final criteria_list: {criteria_list}")
-
-        for criterion in criteria_list:
-            logger.info(f"Processing criterion: {criterion}, type: {type(criterion)}")
-            # Handle both dict and object-like criterion structures
-            if hasattr(criterion, 'get'):
-                # Dictionary-like access
-                criterion_info = {
-                    'name': criterion.get('name'),
-                    'prompt': criterion.get('prompt'),
-                    'order_num': criterion.get('order_num'),
-                    'options': []
-                }
-
-                options_data = criterion.get('options', [])
-                logger.info(f"Criterion '{criterion.get('name')}' options: {options_data}")
-                for option in options_data:
-                    logger.info(f"Processing option: {option}, type: {type(option)}")
-                    option_info = {
-                        'name': option.get('name'),
-                        'explanation': option.get('explanation'),
-                        'points': option.get('points'),
-                        'order_num': option.get('order_num')
-                    }
-                    criterion_info['options'].append(option_info)
+        # Normalize criteria into a simple, consistent shape
+        def _as_dict(criterion):
+            if isinstance(criterion, dict):
+                name = criterion.get('name')
+                prompt = criterion.get('prompt')
+                order_num = criterion.get('order_num')
+                options = criterion.get('options', [])
             else:
-                # Object-like access
-                criterion_info = {
-                    'name': getattr(criterion, 'name', None),
-                    'prompt': getattr(criterion, 'prompt', None),
-                    'order_num': getattr(criterion, 'order_num', None),
-                    'options': []
-                }
-
+                name = getattr(criterion, 'name', None)
+                prompt = getattr(criterion, 'prompt', None)
+                order_num = getattr(criterion, 'order_num', None)
                 options = getattr(criterion, 'options', [])
-                logger.info(f"Criterion '{getattr(criterion, 'name', 'unknown')}' options: {options}")
-                for option in options:
-                    logger.info(f"Processing option: {option}, type: {type(option)}")
-                    option_info = {
-                        'name': getattr(option, 'name', None),
-                        'explanation': getattr(option, 'explanation', None),
-                        'points': getattr(option, 'points', None),
-                        'order_num': getattr(option, 'order_num', None)
-                    }
-                    criterion_info['options'].append(option_info)
+            norm_opts = []
+            for opt in options or []:
+                if isinstance(opt, dict):
+                    norm_opts.append({
+                        'name': opt.get('name'),
+                        'explanation': opt.get('explanation'),
+                        'points': opt.get('points'),
+                        'order_num': opt.get('order_num'),
+                    })
+                else:
+                    norm_opts.append({
+                        'name': getattr(opt, 'name', None),
+                        'explanation': getattr(opt, 'explanation', None),
+                        'points': getattr(opt, 'points', None),
+                        'order_num': getattr(opt, 'order_num', None),
+                    })
+            return {
+                'name': name,
+                'prompt': prompt,
+                'order_num': order_num,
+                'options': norm_opts,
+            }
 
-            criteria_details.append(criterion_info)
+        criteria_details = [_as_dict(c) for c in (rubric_criteria or [])]
 
-        # Get basic ORA configuration
+        # 4) Build response
         ora_info = {
             'ora_location': ora_location,
             'display_name': getattr(ora_xblock, 'display_name', 'ORA Component'),
@@ -3927,28 +3805,27 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
             'file_upload_type': getattr(ora_xblock, 'file_upload_type', None),
             'assessment_steps': getattr(ora_xblock, 'assessment_steps', []),
             'rubric': {
-                'criteria': criteria_details
-            }
+                'criteria': criteria_details,
+            },
         }
 
-        # Prepare example options_selected format
         example_options_selected = {}
-        for criterion in criteria_details:
-            if criterion['options']:
-                example_options_selected[criterion['name']] = criterion['options'][0]['name']
+        for c in criteria_details:
+            if c.get('name') and c.get('options'):
+                example_options_selected[c['name']] = c['options'][0]['name']
 
         return {
             'success': True,
             'ora_info': ora_info,
             'example_options_selected': example_options_selected,
-            'criterion_names': [c['name'] for c in criteria_details],
-            'message': f'Successfully retrieved ORA details for {ora_location}'
+            'criterion_names': [c.get('name') for c in criteria_details if c.get('name')],
+            'message': f'Successfully retrieved ORA details for {ora_location}',
         }
 
     except Exception as e:
-        logger.error(f"Unexpected error in get_ora_details_logic: {e}")
+        logger.error("Unexpected error in get_ora_details_logic: %s", e)
         return {
             'success': False,
             'error': f'Unexpected error: {str(e)}',
-            'error_code': 'unexpected_error'
+            'error_code': 'unexpected_error',
         }
