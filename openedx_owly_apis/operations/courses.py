@@ -3128,7 +3128,7 @@ def get_submission_uuid_for_student(ora_location: str, student_username: str) ->
                 try:
                     course_id = str(ora_usage_key.course_key)
                     item_id = str(ora_usage_key)
-                    
+
                     submissions_list = submissions_api.get_submissions(
                         course_id=course_id,
                         item_id=item_id,
@@ -3146,9 +3146,6 @@ def get_submission_uuid_for_student(ora_location: str, student_username: str) ->
                             f"target={str(student_user.id)}"
                         )
                         if submission.get('student_id') == str(student_user.id):
-                            logger.info(
-                                f"Found submission via API filtering for student '{student_username}': {submission.get('uuid')}"
-                            )
                             return submission.get('uuid')
 
                     logger.warning(
@@ -3631,10 +3628,10 @@ def grade_ora_content_logic(
             'error_code': 'unexpected_error'
         }
 
+
 def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
     """
     Get detailed information about an ORA component including rubric and submission details.
-
     Args:
         ora_location (str): ORA XBlock location/usage key
         user_identifier: User requesting the information
