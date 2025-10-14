@@ -64,6 +64,29 @@ def _get_acting_user(user_identifier):
     return fallback
 
 
+def _normalize_course_id(course_id):
+    """
+    Normalize course_id by replacing spaces with '+' signs.
+
+    When course_id is passed as URL parameter, '+' signs are decoded as spaces.
+    This function converts them back to the proper format.
+
+    Example:
+        "course-v1:aulasneo 2025 2025" -> "course-v1:aulasneo+2025+2025"
+
+    Args:
+        course_id (str): Course identifier that may have spaces instead of '+'
+
+    Returns:
+        str: Normalized course_id with '+' instead of spaces
+    """
+    if not course_id:
+        return course_id
+
+    # Replace spaces with '+' for proper course key format
+    return course_id.replace(' ', '+')
+
+
 def _validate_vertical_id(vertical_id):
     """Validate vertical_id string and fetch parent item.
 
@@ -3825,4 +3848,742 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
             'success': False,
             'error': f'Unexpected error: {str(e)}',
             'error_code': 'unexpected_error',
+        }
+
+
+def create_cohort_logic(
+    course_id: str,
+    cohort_name: str,
+    assignment_type: str = "manual",
+    user_identifier=None
+) -> dict:
+    """
+    Create a new cohort in an OpenedX course.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        cohort_name (str): Name for the new cohort
+        assignment_type (str): Type of assignment - "manual" or "random"
+        user_identifier: User creating the cohort
+
+    Returns:
+        dict: Success/error response with cohort details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not cohort_name:
+            return {
+                "success": False,
+                "error": "missing_cohort_name",
+                "message": "cohort_name is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        course_id = _normalize_course_id(course_id)
+
+        # Get acting user
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "user_not_found",
+                "message": "Acting user not found"
+            }
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import cohorts module
+        try:
+            from openedx.core.djangoapps.course_groups.cohorts import add_cohort
+        except ImportError:
+            return {
+                "success": False,
+                "error": "cohorts_not_available",
+                "message": "Cohorts functionality not available"
+            }
+
+        # Create the cohort
+        cohort = add_cohort(course_key, cohort_name, assignment_type)
+
+        logger.info(
+            f"Successfully created cohort '{cohort_name}' in course {course_id} "
+            f"by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "cohort": {
+                "id": cohort.id,
+                "name": cohort.name,
+                "course_id": str(course_key),
+                "assignment_type": assignment_type,
+                "created_by": acting_user.username
+            },
+            "message": f"Cohort '{cohort_name}' created successfully"
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to create cohort: {str(e)}")
+        return {
+            "success": False,
+            "error": "cohort_creation_failed",
+            "message": f"Failed to create cohort: {str(e)}"
+        }
+
+
+def list_cohorts_logic(course_id: str, user_identifier=None) -> dict:
+    """
+    List all cohorts in a course.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        user_identifier: User requesting the information
+
+    Returns:
+        dict: Success/error response with list of cohorts
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        course_id = _normalize_course_id(course_id)
+
+        # Get acting user
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "user_not_found",
+                "message": "Acting user not found"
+            }
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import cohorts module and course functions
+        try:
+            from openedx.core.djangoapps.course_groups.cohorts import get_course_cohorts
+            from openedx.core.djangoapps.course_groups.models import CourseCohort
+            from openedx.core.lib.courses import get_course_by_id
+        except ImportError:
+            return {
+                "success": False,
+                "error": "cohorts_not_available",
+                "message": "Cohorts functionality not available"
+            }
+
+        # Get the course object (required by get_course_cohorts)
+        try:
+            course = get_course_by_id(course_key)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "course_not_found",
+                "message": f"Course not found: {str(e)}"
+            }
+
+        # Get cohorts for the course
+        cohorts = get_course_cohorts(course)
+
+        cohorts_data = []
+        for cohort in cohorts:
+            # Get member count
+            member_count = cohort.users.count()
+
+            # Get correct assignment_type from CourseCohort model
+            try:
+                course_cohort = CourseCohort.objects.get(course_user_group=cohort)
+                assignment_type = course_cohort.assignment_type
+            except CourseCohort.DoesNotExist:
+                assignment_type = 'manual'  # Default
+
+            cohorts_data.append({
+                "id": cohort.id,
+                "name": cohort.name,
+                "course_id": str(course_key),
+                "assignment_type": assignment_type,
+                "member_count": member_count
+            })
+
+        logger.info(
+            f"Listed {len(cohorts_data)} cohorts for course {course_id} "
+            f"by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "course_id": course_id,
+            "cohorts": cohorts_data,
+            "total_cohorts": len(cohorts_data)
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to list cohorts: {str(e)}")
+        return {
+            "success": False,
+            "error": "cohorts_list_failed",
+            "message": f"Failed to list cohorts: {str(e)}"
+        }
+
+
+def add_user_to_cohort_logic(course_id: str, cohort_id: int, user_identifier_to_add: str, user_identifier=None) -> dict:
+    """
+    Add a user to a specific cohort.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        cohort_id (int): ID of the cohort to add user to
+        user_identifier_to_add (str): User to add (username, email, or user_id)
+        user_identifier: User performing the action
+
+    Returns:
+        dict: Success/error response with operation details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not cohort_id:
+            return {
+                "success": False,
+                "error": "missing_cohort_id",
+                "message": "cohort_id is required"
+            }
+
+        if not user_identifier_to_add:
+            return {
+                "success": False,
+                "error": "missing_user_identifier",
+                "message": "user_identifier_to_add is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        course_id = _normalize_course_id(course_id)
+
+        # Get acting user
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "acting_user_not_found",
+                "message": "Acting user not found"
+            }
+
+        # Get target user to add
+        target_user = _resolve_user(user_identifier_to_add)
+        if not target_user:
+            return {
+                "success": False,
+                "error": "target_user_not_found",
+                "message": f"User '{user_identifier_to_add}' not found"
+            }
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import cohorts modules
+        try:
+            from common.djangoapps.student.models import CourseEnrollment
+            from openedx.core.djangoapps.course_groups.cohorts import add_user_to_cohort, get_cohort_by_id
+        except ImportError:
+            return {
+                "success": False,
+                "error": "cohorts_not_available",
+                "message": "Cohorts functionality not available"
+            }
+
+        # Verify user is enrolled in the course
+        if not CourseEnrollment.is_enrolled(target_user, course_key):
+            return {
+                "success": False,
+                "error": "user_not_enrolled",
+                "message": f"User '{target_user.username}' is not enrolled in course {course_id}"
+            }
+
+        # Get the cohort
+        try:
+            cohort = get_cohort_by_id(course_key, cohort_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "cohort_not_found",
+                "message": f"Cohort with ID {cohort_id} not found in course {course_id}"
+            }
+
+        # Add user to cohort (captures previous cohort info)
+        try:
+            user, previous_cohort_name, is_preassigned = add_user_to_cohort(cohort, target_user.username)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "add_user_failed",
+                "message": f"Failed to add user to cohort: {str(e)}"
+            }
+
+        logger.info(
+            f"Successfully added user {target_user.username} to cohort '{cohort.name}' "
+            f"(previous: {previous_cohort_name or 'None'}) in course {course_id} by {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "action": "add_user_to_cohort",
+            "cohort": {
+                "id": cohort.id,
+                "name": cohort.name,
+                "course_id": str(course_key)
+            },
+            "user": {
+                "id": target_user.id,
+                "username": target_user.username,
+                "email": target_user.email
+            },
+            "previous_cohort": previous_cohort_name,
+            "was_moved": previous_cohort_name is not None,
+            "performed_by": acting_user.username,
+            "message": f"User '{target_user.username}' added to cohort '{cohort.name}'"
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to add user to cohort: {str(e)}")
+        return {
+            "success": False,
+            "error": "operation_failed",
+            "message": f"Failed to add user to cohort: {str(e)}"
+        }
+
+
+def remove_user_from_cohort_logic(
+    course_id: str,
+    cohort_id: int,
+    user_identifier_to_remove: str,
+    user_identifier=None
+) -> dict:
+    """
+    Remove a user from a specific cohort.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        cohort_id (int): ID of the cohort to remove user from
+        user_identifier_to_remove (str): User to remove (username, email, or user_id)
+        user_identifier: User performing the action
+
+    Returns:
+        dict: Success/error response with operation details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not cohort_id:
+            return {
+                "success": False,
+                "error": "missing_cohort_id",
+                "message": "cohort_id is required"
+            }
+
+        if not user_identifier_to_remove:
+            return {
+                "success": False,
+                "error": "missing_user_identifier",
+                "message": "user_identifier_to_remove is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        course_id = _normalize_course_id(course_id)
+
+        # Get acting user
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "acting_user_not_found",
+                "message": "Acting user not found"
+            }
+
+        # Get target user to remove
+        target_user = _resolve_user(user_identifier_to_remove)
+        if not target_user:
+            return {
+                "success": False,
+                "error": "target_user_not_found",
+                "message": f"User '{user_identifier_to_remove}' not found"
+            }
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import cohorts modules
+        try:
+            from openedx.core.djangoapps.course_groups.cohorts import get_cohort_by_id, remove_user_from_cohort
+        except ImportError:
+            return {
+                "success": False,
+                "error": "cohorts_not_available",
+                "message": "Cohorts functionality not available"
+            }
+
+        # Get the cohort
+        try:
+            cohort = get_cohort_by_id(course_key, cohort_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "cohort_not_found",
+                "message": f"Cohort with ID {cohort_id} not found in course {course_id}"
+            }
+
+        # Remove user from cohort
+        try:
+            remove_user_from_cohort(cohort, target_user.username)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "remove_user_failed",
+                "message": f"Failed to remove user from cohort: {str(e)}"
+            }
+
+        logger.info(
+            f"Successfully removed user {target_user.username} from cohort '{cohort.name}' "
+            f"in course {course_id} by {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "action": "remove_user_from_cohort",
+            "cohort": {
+                "id": cohort.id,
+                "name": cohort.name,
+                "course_id": str(course_key)
+            },
+            "user": {
+                "id": target_user.id,
+                "username": target_user.username,
+                "email": target_user.email
+            },
+            "performed_by": acting_user.username,
+            "message": f"User '{target_user.username}' removed from cohort '{cohort.name}'"
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to remove user from cohort: {str(e)}")
+        return {
+            "success": False,
+            "error": "operation_failed",
+            "message": f"Failed to remove user from cohort: {str(e)}"
+        }
+
+
+def list_cohort_members_logic(course_id: str, cohort_id: int, user_identifier=None) -> dict:
+    """
+    List all members of a specific cohort.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        cohort_id (int): ID of the cohort to list members for
+        user_identifier: User requesting the information
+
+    Returns:
+        dict: Success/error response with list of cohort members
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not cohort_id:
+            return {
+                "success": False,
+                "error": "missing_cohort_id",
+                "message": "cohort_id is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        course_id = _normalize_course_id(course_id)
+
+        # Get acting user
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "user_not_found",
+                "message": "Acting user not found"
+            }
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import cohorts module
+        try:
+            from openedx.core.djangoapps.course_groups.cohorts import get_cohort_by_id
+        except ImportError:
+            return {
+                "success": False,
+                "error": "cohorts_not_available",
+                "message": "Cohorts functionality not available"
+            }
+
+        # Get the cohort
+        try:
+            cohort = get_cohort_by_id(course_key, cohort_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "cohort_not_found",
+                "message": f"Cohort with ID {cohort_id} not found in course {course_id}"
+            }
+
+        # Import enrollment model
+        try:
+            from common.djangoapps.student.models import CourseEnrollment
+        except ImportError:
+            pass  # Continue without enrollment info
+
+        # Get cohort members
+        members = cohort.users.all()
+
+        members_data = []
+        for user in members:
+            # Check enrollment status
+            is_enrolled = False
+            try:
+                is_enrolled = CourseEnrollment.is_enrolled(user, course_key)
+            except Exception:
+                pass  # Continue without enrollment status
+
+            members_data.append({
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "is_active": user.is_active,
+                "is_enrolled": is_enrolled
+            })
+
+        logger.info(
+            f"Listed {len(members_data)} members for cohort '{cohort.name}' "
+            f"in course {course_id} by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "cohort": {
+                "id": cohort.id,
+                "name": cohort.name,
+                "course_id": str(course_key)
+            },
+            "members": members_data,
+            "total_members": len(members_data)
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to list cohort members: {str(e)}")
+        return {
+            "success": False,
+            "error": "list_members_failed",
+            "message": f"Failed to list cohort members: {str(e)}"
+        }
+
+
+def delete_cohort_logic(course_id: str, cohort_id: int, user_identifier=None) -> dict:
+    """
+    Delete a cohort from a course.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        cohort_id (int): ID of the cohort to delete
+        user_identifier: User performing the action
+
+    Returns:
+        dict: Success/error response with operation details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not cohort_id:
+            return {
+                "success": False,
+                "error": "missing_cohort_id",
+                "message": "cohort_id is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        course_id = _normalize_course_id(course_id)
+
+        # Get acting user
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            return {
+                "success": False,
+                "error": "user_not_found",
+                "message": "Acting user not found"
+            }
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import cohorts module
+        try:
+            from openedx.core.djangoapps.course_groups.cohorts import DEFAULT_COHORT_NAME, get_cohort_by_id
+        except ImportError:
+            return {
+                "success": False,
+                "error": "cohorts_not_available",
+                "message": "Cohorts functionality not available"
+            }
+
+        # Get and delete the cohort
+        try:
+            cohort = get_cohort_by_id(course_key, cohort_id)
+            cohort_name = cohort.name
+            member_count = cohort.users.count()
+
+            # Protect default cohort from deletion
+            if cohort.name == DEFAULT_COHORT_NAME or cohort.name == "Default Group":
+                return {
+                    "success": False,
+                    "error": "cannot_delete_default_cohort",
+                    "message": f"The default cohort '{cohort.name}' cannot be deleted"
+                }
+
+            # Delete the cohort
+            cohort.delete()
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "cohort_deletion_failed",
+                "message": f"Failed to delete cohort: {str(e)}"
+            }
+
+        logger.info(
+            f"Successfully deleted cohort '{cohort_name}' (had {member_count} members) "
+            f"from course {course_id} by {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "action": "delete_cohort",
+            "cohort": {
+                "id": cohort_id,
+                "name": cohort_name,
+                "course_id": str(course_key),
+                "had_members": member_count
+            },
+            "performed_by": acting_user.username,
+            "message": f"Cohort '{cohort_name}' deleted successfully"
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to delete cohort: {str(e)}")
+        return {
+            "success": False,
+            "error": "operation_failed",
+            "message": f"Failed to delete cohort: {str(e)}"
         }

@@ -629,3 +629,308 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
 
         status_code = 200 if result.get('success') else 400
         return Response(result, status=status_code)
+
+    # =====================================
+    # COHORT MANAGEMENT ENDPOINTS
+    # =====================================
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='cohorts/create',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def create_cohort(self, request):
+        """
+        Create a new cohort in an OpenedX course.
+
+        This endpoint allows course staff to create cohorts for organizing students
+        into smaller groups within a course.
+
+        Body parameters:
+            course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+            cohort_name (str): Name for the new cohort
+            assignment_type (str, optional): Type of assignment - "manual" (default) or "random"
+
+        Example request body::
+
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "cohort_name": "Group A",
+                "assignment_type": "manual"
+            }
+
+        Returns:
+            JSON response with cohort creation result including cohort ID and details
+        """
+        # pylint: disable=import-outside-toplevel
+        from openedx_owly_apis.operations.courses import create_cohort_logic
+
+        data = request.data
+        result = create_cohort_logic(
+            course_id=data.get('course_id'),
+            cohort_name=data.get('cohort_name'),
+            assignment_type=data.get('assignment_type', 'manual'),
+            user_identifier=request.user.id
+        )
+
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='cohorts/list',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def list_cohorts(self, request):
+        """
+        List all cohorts in a course.
+
+        This endpoint retrieves all cohorts configured for a specific course,
+        including their member counts and assignment types.
+
+        Query parameters:
+            course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+
+        Example request::
+
+            GET /api/v1/owly-courses/cohorts/list/?course_id=course-v1:TestX+CS101+2024
+
+        Returns:
+            JSON response with list of cohorts and their details
+        """
+        # pylint: disable=import-outside-toplevel
+        from openedx_owly_apis.operations.courses import list_cohorts_logic
+
+        course_id = request.query_params.get('course_id')
+
+        if not course_id:
+            return Response({
+                'success': False,
+                'error': 'course_id parameter is required',
+                'error_code': 'missing_course_id'
+            }, status=400)
+
+        result = list_cohorts_logic(
+            course_id=course_id,
+            user_identifier=request.user.id
+        )
+
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='cohorts/members/add',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def add_user_to_cohort(self, request):
+        """
+        Add a user to a specific cohort.
+
+        This endpoint allows course staff to add students to cohorts for
+        group-based learning activities and content organization.
+
+        Body parameters:
+            course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+            cohort_id (int): ID of the cohort to add user to
+            user_identifier (str): User to add (username, email, or user_id)
+
+        Example request body::
+
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "cohort_id": 1,
+                "user_identifier": "student@example.com"
+            }
+
+        Returns:
+            JSON response with operation result and user/cohort details
+        """
+        # pylint: disable=import-outside-toplevel
+        from openedx_owly_apis.operations.courses import add_user_to_cohort_logic
+
+        data = request.data
+        result = add_user_to_cohort_logic(
+            course_id=data.get('course_id'),
+            cohort_id=data.get('cohort_id'),
+            user_identifier_to_add=data.get('user_identifier'),
+            user_identifier=request.user.id
+        )
+
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='cohorts/members/remove',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def remove_user_from_cohort(self, request):
+        """
+        Remove a user from a specific cohort.
+
+        This endpoint allows course staff to remove students from cohorts
+        when reorganizing groups or handling course membership changes.
+
+        Body parameters:
+            course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+            cohort_id (int): ID of the cohort to remove user from
+            user_identifier (str): User to remove (username, email, or user_id)
+
+        Example request body::
+
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "cohort_id": 1,
+                "user_identifier": "student@example.com"
+            }
+
+        Returns:
+            JSON response with operation result and user/cohort details
+        """
+        # pylint: disable=import-outside-toplevel
+        from openedx_owly_apis.operations.courses import remove_user_from_cohort_logic
+
+        data = request.data
+        result = remove_user_from_cohort_logic(
+            course_id=data.get('course_id'),
+            cohort_id=data.get('cohort_id'),
+            user_identifier_to_remove=data.get('user_identifier'),
+            user_identifier=request.user.id
+        )
+
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='cohorts/members/list',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def list_cohort_members(self, request):
+        """
+        List all members of a specific cohort.
+
+        This endpoint retrieves detailed information about all users
+        currently assigned to a particular cohort.
+
+        Query parameters:
+            course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+            cohort_id (int): ID of the cohort to list members for
+
+        Example request::
+
+            GET /api/v1/owly-courses/cohorts/members/list/?course_id=course-v1:TestX+CS101+2024&cohort_id=1
+
+        Returns:
+            JSON response with list of cohort members and their details
+        """
+        # pylint: disable=import-outside-toplevel
+        from openedx_owly_apis.operations.courses import list_cohort_members_logic
+
+        # Accept parameters from both query_params and data for test compatibility
+        course_id = request.query_params.get('course_id') or request.data.get('course_id')
+        cohort_id = request.query_params.get('cohort_id') or request.data.get('cohort_id')
+
+        if not course_id:
+            return Response({
+                'success': False,
+                'error': 'course_id parameter is required',
+                'error_code': 'missing_course_id'
+            }, status=400)
+
+        if not cohort_id:
+            return Response({
+                'success': False,
+                'error': 'cohort_id parameter is required',
+                'error_code': 'missing_cohort_id'
+            }, status=400)
+
+        try:
+            cohort_id = int(cohort_id)
+        except (ValueError, TypeError):
+            return Response({
+                'success': False,
+                'error': 'cohort_id must be a valid integer',
+                'error_code': 'invalid_cohort_id'
+            }, status=400)
+
+        result = list_cohort_members_logic(
+            course_id=course_id,
+            cohort_id=cohort_id,
+            user_identifier=request.user.id
+        )
+
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
+
+    @action(
+        detail=False,
+        methods=['delete'],
+        url_path='cohorts/delete',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def delete_cohort(self, request):
+        """
+        Delete a cohort from a course.
+
+        This endpoint allows course staff to permanently remove a cohort
+        and all its membership associations from a course.
+
+        Query parameters:
+            course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+            cohort_id (int): ID of the cohort to delete
+
+        Example request::
+
+            DELETE /api/v1/owly-courses/cohorts/delete/?course_id=course-v1:TestX+CS101+2024&cohort_id=1
+
+        Warning:
+            This operation is irreversible. All user assignments to this cohort will be lost.
+
+        Returns:
+            JSON response with deletion result and summary of affected data
+        """
+        # pylint: disable=import-outside-toplevel
+        from openedx_owly_apis.operations.courses import delete_cohort_logic
+
+        # Accept parameters from both query_params and data for test compatibility
+        course_id = request.query_params.get('course_id') or request.data.get('course_id')
+        cohort_id = request.query_params.get('cohort_id') or request.data.get('cohort_id')
+
+        if not course_id:
+            return Response({
+                'success': False,
+                'error': 'course_id parameter is required',
+                'error_code': 'missing_course_id'
+            }, status=400)
+
+        if not cohort_id:
+            return Response({
+                'success': False,
+                'error': 'cohort_id parameter is required',
+                'error_code': 'missing_cohort_id'
+            }, status=400)
+
+        try:
+            cohort_id = int(cohort_id)
+        except (ValueError, TypeError):
+            return Response({
+                'success': False,
+                'error': 'cohort_id must be a valid integer',
+                'error_code': 'invalid_cohort_id'
+            }, status=400)
+
+        result = delete_cohort_logic(
+            course_id=course_id,
+            cohort_id=cohort_id,
+            user_identifier=request.user.id
+        )
+
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)

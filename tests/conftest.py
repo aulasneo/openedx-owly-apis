@@ -64,7 +64,11 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
 
         @classmethod
         def from_string(cls, s):
-            return cls(s)
+            # Validate basic format for testing purposes
+            if s and isinstance(s, str) and s != "invalid-format":
+                return cls(s)
+            # Raise exception for invalid formats
+            raise ValueError(f"Invalid course key: {s}")
 
         def __str__(self):
             return self._raw
@@ -123,7 +127,7 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
 
     def _simple_ret(name):
         def _fn(**kwargs):
-            return {"called": name, "kwargs": kwargs}
+            return {"success": True, "called": name, "kwargs": kwargs}
         return _fn
     ops_courses.update_course_settings_logic = _simple_ret("update_course_settings_logic")
     ops_courses.create_course_logic = _simple_ret("create_course_logic")
@@ -141,8 +145,17 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_courses.delete_xblock_logic = _simple_ret("delete_xblock_logic")
     ops_courses.manage_course_staff_logic = _simple_ret("manage_course_staff_logic")
     ops_courses.list_course_staff_logic = _simple_ret("list_course_staff_logic")
+    ops_courses.toggle_certificate_simple_logic = _simple_ret("toggle_certificate_simple_logic")
     ops_courses.add_ora_content_logic = _simple_ret("add_ora_content_logic")
     ops_courses.grade_ora_content_logic = _simple_ret("grade_ora_content_logic")
+    ops_courses.get_ora_details_logic = _simple_ret("get_ora_details_logic")
+    ops_courses.list_ora_submissions_logic = _simple_ret("list_ora_submissions_logic")
+    ops_courses.create_cohort_logic = _simple_ret("create_cohort_logic")
+    ops_courses.list_cohorts_logic = _simple_ret("list_cohorts_logic")
+    ops_courses.add_user_to_cohort_logic = _simple_ret("add_user_to_cohort_logic")
+    ops_courses.remove_user_from_cohort_logic = _simple_ret("remove_user_from_cohort_logic")
+    ops_courses.list_cohort_members_logic = _simple_ret("list_cohort_members_logic")
+    ops_courses.delete_cohort_logic = _simple_ret("delete_cohort_logic")
     sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
     stubs.append("openedx_owly_apis.operations.courses")
 
@@ -157,7 +170,7 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
 
     def _mk_analytics(name):
         def _fn(*args, **kwargs):
-            return {"called": name, "kwargs": _normalize_args(args, kwargs)}
+            return {"success": True, "called": name, "kwargs": _normalize_args(args, kwargs)}
         return _fn
     ops_analytics.get_overview_analytics_logic = _mk_analytics("get_overview_analytics_logic")
     ops_analytics.get_enrollments_analytics_logic = _mk_analytics("get_enrollments_analytics_logic")
@@ -171,7 +184,7 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
 
     def _cfg_logic(request, user_email=None):  # pylint: disable=unused-argument
         # Echo a simple payload to assert the view is wiring correctly
-        return {"called": "is_owly_chat_enabled_logic", "kwargs": {"user_email": user_email}}
+        return {"success": True, "called": "is_owly_chat_enabled_logic", "kwargs": {"user_email": user_email}}
 
     ops_config.is_owly_chat_enabled_logic = _cfg_logic
     sys.modules["openedx_owly_apis.operations.config"] = ops_config
