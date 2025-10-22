@@ -9,7 +9,51 @@ Change Log
 
    This project adheres to Semantic Versioning (https://semver.org/).
 
-.. There should always be an "Version 1.2.0 (2025-09-23)" section for changes pending release.
+.. There should always be an "Unreleased" section for changes pending release.
+
+Version 1.4.0 (2025-10-22)
+**************************
+
+Added
+=====
+
+* **Course Staff Management APIs**:
+  - ``POST /staff/manage``: Add or remove users from course staff roles (staff, course_creator)
+  - ``GET /staff/list``: List all users with course staff roles, with optional role filtering
+  - Support for simplified role types: staff and course_creator roles
+  - Enhanced role management with detailed user information
+
+* **Open Response Assessment (ORA) Management**:
+  - ``POST /content/ora``: Create ORA components with full configuration support
+  - ``POST /content/ora/grade``: Grade ORA submissions using staff assessment
+  - ``GET /content/ora/details``: Get detailed ORA information including rubric structure
+  - ``GET /content/ora/submissions``: List all submissions for an ORA component
+  - Support for peer assessment, self-assessment, and staff assessment workflows
+  - Comprehensive rubric management and grading capabilities
+
+* **Cohort Management APIs**:
+  - ``POST /cohorts/create``: Create new cohorts with manual or random assignment
+  - ``GET /cohorts/list``: List all cohorts in a course
+  - ``POST /cohorts/members/add``: Add users to specific cohorts
+  - ``POST /cohorts/members/remove``: Remove users from cohorts
+  - ``GET /cohorts/members/list``: List all members of a cohort
+  - ``DELETE /cohorts/delete``: Delete cohorts and their memberships
+
+Changed
+=======
+
+* Reorganized course management endpoints with clearer permission models
+* Enhanced error handling and validation across all endpoints
+* Improved documentation with detailed examples and error scenarios
+* Standardized response formats across all API endpoints
+
+Documentation
+=============
+
+* Added comprehensive API documentation for course staff management
+* Detailed ORA workflow documentation with grading examples
+* Cohort management usage examples and best practices
+* Enhanced endpoint documentation with request/response examples
 
 Version 1.2.0 (2025-09-23)
 **************************
