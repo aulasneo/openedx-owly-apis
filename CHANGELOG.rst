@@ -11,7 +11,7 @@ Change Log
 
 .. There should always be an "Unreleased" section for changes pending release.
 
-Version 1.4.0 (2025-10-22)
+Unreleased
 **************************
 
 Added
