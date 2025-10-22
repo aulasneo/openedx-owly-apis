@@ -464,7 +464,23 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             }
 
         Returns:
-            JSON response with grading result including assessment ID and success status
+            JSON response with grading result including:
+
+            - success: Boolean indicating operation success
+            - message: Success message
+            - assessment_id: ID of the created assessment
+            - submission_uuid: UUID of the graded submission
+            - ora_location: Location of the ORA component
+            - student_response: Student's submitted response including:
+                - submission_uuid: UUID of the submission
+                - submitted_at: Timestamp of submission
+                - student_id: Student item ID
+                - answer: Student's answer containing:
+                    - text: Text response(s) from the student
+                    - files: List of uploaded files (if any) with file_key, file_name, file_description
+            - grade_data: The grading data that was applied
+            - points_earned: Points earned by the student
+            - points_possible: Maximum possible points
         """
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import grade_ora_content_logic

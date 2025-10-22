@@ -3261,7 +3261,8 @@ def list_ora_submissions_logic(ora_location: str, user_identifier=None) -> dict:
                     'student_username': acting_user.username,
                     'student_email': acting_user.email,
                     'submitted_at': submission.created_at.isoformat(),
-                    'status': submission.status
+                    'status': submission.status,
+                    'answer': submission.answer  # Respuesta del estudiante
                 })
 
         except Exception as e:
@@ -3403,7 +3404,7 @@ def grade_ora_content_logic(
                 'error_code': 'not_ora_xblock'
             }
 
-        # Validate submission exists
+        # Validate submission exists and extract student response
         try:
             submission = submissions_api.get_submission(submission_uuid)
             if not submission:
@@ -3412,6 +3413,56 @@ def grade_ora_content_logic(
                     'error': f'Submission {submission_uuid} not found',
                     'error_code': 'submission_not_found'
                 }
+
+            # Extract student response data
+            student_response = {
+                'submission_uuid': submission_uuid,
+                'submitted_at': submission.get('submitted_at') or submission.get('created_at'),
+                'student_id': submission.get('student_item'),
+                'answer': {}
+            }
+
+            # Extract the actual answer content
+            answer = submission.get('answer', {})
+            if isinstance(answer, dict):
+                # Extract text parts
+                parts = answer.get('parts', [])
+                if parts:
+                    text_responses = []
+                    file_uploads = []
+
+                    for part in parts:
+                        if isinstance(part, dict):
+                            # Text response
+                            if 'text' in part:
+                                text_responses.append(part['text'])
+                            # File uploads
+                            if 'file_key' in part or 'file_keys' in part:
+                                file_key = part.get('file_key') or part.get('file_keys')
+                                file_name = part.get('file_name', '')
+                                file_description = part.get('file_description', '')
+                                file_uploads.append({
+                                    'file_key': file_key,
+                                    'file_name': file_name,
+                                    'file_description': file_description
+                                })
+
+                    student_response['answer']['text'] = '\n\n'.join(text_responses) if text_responses else ''
+                    student_response['answer']['files'] = file_uploads
+                else:
+                    # Fallback for simple text answer
+                    student_response['answer']['text'] = answer.get('text', str(answer))
+                    student_response['answer']['files'] = []
+            elif isinstance(answer, str):
+                # Simple string answer
+                student_response['answer']['text'] = answer
+                student_response['answer']['files'] = []
+            else:
+                student_response['answer']['text'] = str(answer)
+                student_response['answer']['files'] = []
+
+            logger.info(f"Extracted student response: {student_response}")
+
         except Exception as e:
             logger.error(f"Error retrieving submission {submission_uuid}: {e}")
             return {
@@ -3434,15 +3485,10 @@ def grade_ora_content_logic(
                 'error_code': 'missing_options_selected'
             }
 
-        # Get course and item IDs for staff grading workflow
-        course_id = str(ora_usage_key.course_key)
-        item_id = str(ora_usage_key)
-
         # Create the staff assessment
         try:
             # Get rubric configuration from the ORA XBlock
             # Try different attributes to find the actual rubric criteria
-            rubric_data = None
             rubric_criteria = []
 
             # Try various ORA XBlock attributes for rubric data
@@ -3548,10 +3594,15 @@ def grade_ora_content_logic(
             # Use the staff API to create the assessment
             # The staff_api.create_assessment expects: (submission_uuid, user_id,
             # options_selected, criterion_feedback, overall_feedback, rubric_dict)
+
+            # Get the scorer_id from acting_user
+            scorer_id = str(acting_user.id) if hasattr(acting_user, 'id') else acting_user.username
+            logger.info(f"Using scorer_id: {scorer_id} (acting_user: {acting_user.username})")
+
             try:
                 assessment = staff_api.create_assessment(
                     submission_uuid,
-                    user_identifier,  # Staff user ID
+                    scorer_id,  # Staff user ID (CORREGIDO: usar acting_user.id)
                     options_selected,  # Dict of criterion_name -> option_name
                     criterion_feedback,  # Dict of criterion_name -> feedback text
                     overall_feedback,  # String with overall feedback
@@ -3565,7 +3616,7 @@ def grade_ora_content_logic(
                 try:
                     assessment = staff_api.create_assessment(
                         submission_uuid,
-                        user_identifier,
+                        scorer_id,
                         options_selected,
                         rubric_dict,  # Try rubric_dict before feedback
                         criterion_feedback,
@@ -3582,37 +3633,49 @@ def grade_ora_content_logic(
             logger.info(f"Attempting to update workflow for submission {submission_uuid}")
 
             try:
-                # Get the workflow for this submission
-                workflow = workflow_api.get_workflow_for_submission(
-                    submission_uuid
-                )
+                # Get assessment requirements from the ORA XBlock
+                assessment_requirements = {}
+                if hasattr(ora_xblock, 'rubric_assessments'):
+                    assessment_requirements = ora_xblock.rubric_assessments or {}
+                    logger.info(f"Assessment requirements: {assessment_requirements}")
+
+                # Get course settings (can be empty dict as default)
+                course_settings = {}
+
+                # Try to get workflow with new API signature (requires assessment_requirements and course_settings)
+                try:
+                    workflow = workflow_api.get_workflow_for_submission(
+                        submission_uuid,
+                        assessment_requirements,
+                        course_settings
+                    )
+                    logger.info(f"Got workflow using new API signature: {workflow}")
+                except TypeError:
+                    # Fallback to old API signature if available
+                    try:
+                        workflow = workflow_api.get_workflow_for_submission(submission_uuid)
+                        logger.info(f"Got workflow using old API signature: {workflow}")
+                    except Exception as old_api_error:
+                        logger.warning(f"Old API signature also failed: {old_api_error}")
+                        workflow = None
 
                 if workflow:
-                    logger.info(f"Found workflow for submission: {workflow}")
+                    logger.info(f"Found workflow status: {workflow.get('status')}")
 
                     # Update workflow to mark staff assessment as complete
-                    # Try different methods to update the workflow
+                    # Use update_from_assessments to recalculate workflow status
                     try:
-                        workflow_api.update_from_assessments(
+                        updated_workflow = workflow_api.update_from_assessments(
                             submission_uuid,
-                            course_id,
-                            item_id
+                            assessment_requirements,
+                            course_settings
                         )
-                        logger.info(f"Workflow updated successfully for submission {submission_uuid}")
+                        logger.info(f"Workflow updated successfully. New status: {updated_workflow.get('status')}")
                     except Exception as workflow_update_error:
                         logger.warning(
                             f"Could not update workflow with update_from_assessments: "
                             f"{workflow_update_error}"
                         )
-
-                        # Try alternative method
-                        try:
-                            workflow_api.update_from_assessments(submission_uuid)
-                            logger.info(f"Workflow updated with alternative method")
-                        except Exception as alt_workflow_error:
-                            logger.warning(f"Alternative workflow update also failed: {alt_workflow_error}")
-                            # Don't fail the whole operation if workflow update fails
-                            pass
                 else:
                     logger.warning(f"No workflow found for submission {submission_uuid}")
             except Exception as workflow_error:
@@ -3626,6 +3689,7 @@ def grade_ora_content_logic(
                 'assessment_id': assessment.get('id') if isinstance(assessment, dict) else None,
                 'submission_uuid': submission_uuid,
                 'ora_location': ora_location,
+                'student_response': student_response,
                 'grade_data': assessment_data,
                 'points_earned': assessment.get('points_earned') if isinstance(assessment, dict) else None,
                 'points_possible': assessment.get('points_possible') if isinstance(assessment, dict) else None
