@@ -7,7 +7,7 @@ from openedx.core.lib.api.authentication import BearerAuthentication
 from rest_framework import viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
 # Importar funciones lógicas originales
@@ -22,6 +22,7 @@ from openedx_owly_apis.operations.courses import (
     create_openedx_problem_logic,
     delete_xblock_logic,
     enable_configure_certificates_logic,
+    get_course_tree_logic,
     publish_content_logic,
     update_advanced_settings_logic,
     update_course_settings_logic,
@@ -86,6 +87,116 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
         return Response(result)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='tree',
+        permission_classes=[IsAdminOrCourseCreator],
+    )
+    def get_course_tree(self, request):
+        """
+        Get the tree structure of an OpenedX course.
+
+        This endpoint returns the hierarchical structure of a course, allowing you to:
+        - Get the complete course tree (course -> chapters -> sequentials -> verticals -> components)
+        - Start from a specific block and get its subtree
+        - Limit the depth of traversal
+
+        Query parameters:
+            course_id (str): Course identifier (e.g., "course-v1:Org+Course+Run")
+            starting_block_id (str, optional): Block ID to start from. If not provided, starts from course root.
+            depth (int, optional): Maximum depth to traverse. If not provided, returns full tree.
+            search_id (str, optional): Exact search by block ID
+            search_type (str, optional): Exact search by block type (course, chapter, sequential, vertical, etc.)
+            search_name (str, optional): Regex search by display_name (case-insensitive)
+
+        Examples:
+            # Get full course tree
+            GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024
+
+            # Get only course with chapters (depth=2)
+            GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024&depth=2
+
+            # Get subtree starting from a specific chapter
+            GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024&starting_block_id=block-v1:TestX+CS101+2024+type@chapter+block@chapter1
+
+            # Search examples
+            # Find all video components
+            GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024&search_type=video
+
+            # Find blocks with "quiz" in the name (regex)
+            GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024&search_name=.*quiz.*
+
+            # Find specific block by ID
+            GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024&search_id=block-v1:TestX+CS101+2024+type@html+block@abc123
+
+        Returns:
+            JSON response with course tree structure:
+            {
+                "success": true,
+                "course_id": "course-v1:...",
+                "root": "block-v1:...",
+                "structure": {
+                    "id": "block-v1:...",
+                    "type": "course",
+                    "display_name": "Course Name",
+                    "children": [
+                        {
+                            "id": "block-v1:...",
+                            "type": "chapter",
+                            "display_name": "Chapter 1",
+                            "children": [...]
+                        }
+                    ]
+                },
+                "search_results": [  // Only present when search parameters are used
+                    {
+                        "id": "block-v1:...",
+                        "type": "video",
+                        "display_name": "Introduction Video"
+                    }
+                ],
+                "search_count": 1  // Only present when search parameters are used
+            }
+        """
+        course_id = request.query_params.get('course_id')
+        starting_block_id = request.query_params.get('starting_block_id')
+        depth = request.query_params.get('depth')
+        search_id = request.query_params.get('search_id')
+        search_type = request.query_params.get('search_type')
+        search_name = request.query_params.get('search_name')
+
+        if not course_id:
+            return Response({
+                'success': False,
+                'error': 'course_id parameter is required',
+                'error_code': 'missing_course_id'
+            }, status=400)
+
+        # Convert depth to int if provided
+        if depth:
+            try:
+                depth = int(depth)
+            except (ValueError, TypeError):
+                return Response({
+                    'success': False,
+                    'error': 'depth must be a valid integer',
+                    'error_code': 'invalid_depth'
+                }, status=400)
+
+        result = get_course_tree_logic(
+            course_id=course_id,
+            starting_block_id=starting_block_id,
+            depth=depth,
+            search_id=search_id,
+            search_type=search_type,
+            search_name=search_name,
+            user_identifier=request.user.id
+        )
+
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
 
     @action(
         detail=False,

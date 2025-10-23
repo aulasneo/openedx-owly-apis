@@ -28,6 +28,281 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
+def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: int = None, 
+                         search_id: str = None, search_type: str = None, search_name: str = None, 
+                         user_identifier=None) -> dict:
+    """
+    Get the tree structure of an OpenedX course with search capabilities.
+    
+    Args:
+        course_id (str): Course identifier (e.g., "course-v1:Org+Course+Run")
+        starting_block_id (str, optional): Block ID to start from. If None, starts from course root.
+        depth (int, optional): Maximum depth to traverse. If None, returns full tree.
+        search_id (str, optional): Exact search by block ID
+        search_type (str, optional): Exact search by block type (course, chapter, sequential, vertical, etc.)
+        search_name (str, optional): Regex search by display_name
+        user_identifier: User identifier for access control
+        
+    Returns:
+        dict: Course tree structure with format:
+        {
+            "course_id": "course-v1:...",
+            "root": "block-v1:...",
+            "structure": {
+                "id": "block-v1:...",
+                "type": "course",
+                "display_name": "Course Name",
+                "children": [...]
+            },
+            "search_results": [...] (if search parameters provided)
+        }
+    """
+    try:
+        from lms.djangoapps.course_blocks.api import get_course_blocks
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from django.contrib.auth import get_user_model
+        
+        logger.info(
+            "get_course_tree start course_id=%s starting_block_id=%s depth=%s search_id=%s search_type=%s search_name=%s user=%s",
+            course_id, starting_block_id, depth, search_id, search_type, search_name, str(user_identifier)
+        )
+        
+        User = get_user_model()
+        acting_user = _get_acting_user(user_identifier)
+        
+        if not acting_user:
+            return {"success": False, "error": "No acting user available"}
+        
+        # Parse course key and handle branch issues
+        try:
+            # Clean course_id to remove any branch information that might cause issues
+            clean_course_id = course_id
+            if '+branch@' in course_id:
+                clean_course_id = course_id.split('+branch@')[0]
+                logger.info(f"Cleaned course_id from '{course_id}' to '{clean_course_id}'")
+            
+            course_key = CourseKey.from_string(clean_course_id)
+            logger.info(f"Parsed course_key: {course_key}")
+            
+            # Verify course exists in modulestore
+            from xmodule.modulestore.django import modulestore
+            store = modulestore()
+            try:
+                course = store.get_course(course_key)
+                if not course:
+                    return {
+                        "success": False,
+                        "error": "course_not_found",
+                        "message": f"Course not found in modulestore: {clean_course_id}",
+                        "original_course_id": course_id,
+                        "cleaned_course_id": clean_course_id
+                    }
+                logger.info(f"Course found in modulestore: {course.display_name}")
+            except Exception as store_error:
+                logger.error(f"Course not found in modulestore '{clean_course_id}': {store_error}")
+                return {
+                    "success": False,
+                    "error": "course_not_in_modulestore",
+                    "message": f"Course not found in modulestore: {clean_course_id}. Error: {str(store_error)}",
+                    "original_course_id": course_id,
+                    "cleaned_course_id": clean_course_id
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to parse course_id '{course_id}': {e}")
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {course_id}. Error: {str(e)}"
+            }
+        
+        # Determine starting block
+        if starting_block_id:
+            try:
+                starting_block_usage_key = UsageKey.from_string(starting_block_id)
+                logger.info(f"Using provided starting_block_usage_key: {starting_block_usage_key}")
+            except Exception as e:
+                logger.error(f"Failed to parse starting_block_id '{starting_block_id}': {e}")
+                return {
+                    "success": False,
+                    "error": "invalid_starting_block_id",
+                    "message": f"Invalid starting_block_id format: {starting_block_id}. Error: {str(e)}"
+                }
+        else:
+            # Use course root as starting block
+            starting_block_usage_key = course_key.make_usage_key('course', 'course')
+            logger.info(f"Using course root as starting_block_usage_key: {starting_block_usage_key}")
+        
+        # Get course blocks structure with cache recovery
+        try:
+            blocks = get_course_blocks(
+                user=acting_user,
+                starting_block_usage_key=starting_block_usage_key,
+                transformers=None  # Use default transformers for access control
+            )
+            logger.info(f"Successfully retrieved course blocks for {starting_block_usage_key}")
+        except Exception as e:
+            logger.error(f"Failed to get course blocks for {starting_block_usage_key}: {e}")
+            
+            # Check if it's a cache-related error and try to recover
+            error_str = str(e).lower()
+            if any(cache_error in error_str for cache_error in [
+                'blockstructurenotfound', 'filenotfounderror', 'no such file or directory'
+            ]):
+                logger.info(f"Detected cache issue, attempting to clear and regenerate block structure for {course_key}")
+                try:
+                    # Clear the block structure cache and regenerate
+                    from openedx.core.djangoapps.content.block_structure.api import clear_course_from_cache
+                    clear_course_from_cache(course_key)
+                    logger.info(f"Cleared block structure cache for {course_key}")
+                    
+                    # Try again after clearing cache
+                    blocks = get_course_blocks(
+                        user=acting_user,
+                        starting_block_usage_key=starting_block_usage_key,
+                        transformers=None
+                    )
+                    logger.info(f"Successfully retrieved course blocks after cache clear for {starting_block_usage_key}")
+                except Exception as retry_error:
+                    logger.error(f"Failed to retrieve course blocks even after cache clear: {retry_error}")
+                    return {
+                        "success": False,
+                        "error": "course_blocks_cache_recovery_failed",
+                        "message": f"Could not retrieve course blocks even after cache recovery. Original error: {str(e)}. Retry error: {str(retry_error)}",
+                        "course_id": course_id,
+                        "starting_block": str(starting_block_usage_key)
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": "course_blocks_not_found",
+                    "message": f"Could not retrieve course blocks. Course may not exist or you may not have access. Error: {str(e)}",
+                    "course_id": course_id,
+                    "starting_block": str(starting_block_usage_key)
+                }
+        
+        if not blocks:
+            return {
+                "success": False,
+                "error": "course_not_found",
+                "message": f"Course not found or no access: {course_id}"
+            }
+        
+        # Search functionality
+        search_results = []
+        has_search = search_id or search_type or search_name
+        
+        if has_search:
+            import re
+            
+            # Compile regex pattern for name search if provided
+            name_pattern = None
+            if search_name:
+                try:
+                    name_pattern = re.compile(search_name, re.IGNORECASE)
+                except re.error as e:
+                    return {
+                        "success": False,
+                        "error": "invalid_regex",
+                        "message": f"Invalid regex pattern in search_name: {e}"
+                    }
+            
+            # Search through all blocks
+            for block_key in blocks:
+                block_type = blocks.get_xblock_field(block_key, 'category')
+                display_name = blocks.get_xblock_field(block_key, 'display_name') or ''
+                block_id = str(block_key)
+                
+                # Check search criteria
+                matches = True
+                
+                # Exact ID match
+                if search_id and search_id != block_id:
+                    matches = False
+                
+                # Exact type match
+                if search_type and search_type != block_type:
+                    matches = False
+                
+                # Regex name match
+                if search_name and name_pattern and not name_pattern.search(display_name):
+                    matches = False
+                
+                if matches:
+                    search_results.append({
+                        "id": block_id,
+                        "type": block_type,
+                        "display_name": display_name
+                    })
+        
+        def build_tree_node(usage_key, current_depth=0):
+            """Recursively build tree node with children"""
+            
+            # Check depth limit
+            if depth is not None and current_depth >= depth:
+                return None
+            
+            # Get block information
+            block_type = blocks.get_xblock_field(usage_key, 'category')
+            display_name = blocks.get_xblock_field(usage_key, 'display_name') or ''
+            
+            # Create node
+            node = {
+                "id": str(usage_key),
+                "type": block_type,
+                "display_name": display_name
+            }
+            
+            # Get children
+            children = blocks.get_children(usage_key)
+            if children and (depth is None or current_depth < depth - 1):
+                child_nodes = []
+                for child_key in children:
+                    child_node = build_tree_node(child_key, current_depth + 1)
+                    if child_node:
+                        child_nodes.append(child_node)
+                
+                if child_nodes:
+                    node["children"] = child_nodes
+            
+            return node
+        
+        # Build the tree structure
+        root_node = build_tree_node(starting_block_usage_key)
+        
+        if not root_node:
+            return {
+                "success": False,
+                "error": "no_structure",
+                "message": "No accessible structure found"
+            }
+        
+        result = {
+            "success": True,
+            "course_id": clean_course_id,
+            "original_course_id": course_id if course_id != clean_course_id else None,
+            "root": str(starting_block_usage_key),
+            "structure": root_node
+        }
+        
+        # Add search results if search was performed
+        if has_search:
+            result["search_results"] = search_results
+            result["search_count"] = len(search_results)
+        
+        return result
+        
+    except Exception as e:
+        logger.exception(f"Error getting course tree: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "course_id": course_id,
+            "requested_by": str(user_identifier)
+        }
+
+
 def _resolve_user(user_identifier):
     """Resolve a user by id, username, or email. Returns User or None."""
     try:
