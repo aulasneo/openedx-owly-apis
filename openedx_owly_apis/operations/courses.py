@@ -66,6 +66,7 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
             "get_course_tree start course_id=%s starting_block_id=%s depth=%s search_id=%s search_type=%s search_name=%s user=%s",
             course_id, starting_block_id, depth, search_id, search_type, search_name, str(user_identifier)
         )
+        print(f"===> get_course_tree START course_id={course_id} starting_block_id={starting_block_id} depth={depth} user={user_identifier}")
         
         User = get_user_model()
         acting_user = _get_acting_user(user_identifier)
@@ -83,6 +84,7 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
             
             course_key = CourseKey.from_string(clean_course_id)
             logger.info(f"Parsed course_key: {course_key}")
+            print(f"===> parsed course_key={course_key}")
             
             # Verify course exists in modulestore (try both draft and published)
             from xmodule.modulestore.django import modulestore
@@ -97,12 +99,15 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                 with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
                     course = store.get_course(course_key)
                     if course:
-                        logger.info(f"Course found in draft modulestore: {course.display_name}")
+                        logger.info(f"Course found in modulestore: {course.display_name}")
+                        print(f"===> modulestore COURSE FOUND name={getattr(course, 'display_name', '')}")
                     else:
                         # Try published branch (LMS courses)
                         with store.branch_setting(ModuleStoreEnum.Branch.published_only):
                             course = store.get_course(course_key)
                             if course:
+                                logger.info(f"Course found in modulestore: {course.display_name}")
+                                print(f"===> modulestore COURSE FOUND name={getattr(course, 'display_name', '')}")
                                 logger.info(f"Course found in published modulestore: {course.display_name}")
                 
                 if not course:
@@ -148,7 +153,128 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
             # Use course root as starting block
             starting_block_usage_key = course_key.make_usage_key('course', 'course')
             logger.info(f"Using course root as starting_block_usage_key: {starting_block_usage_key}")
-        
+            print(f"===> starting_block_usage_key={starting_block_usage_key}")
+
+        # ------------------------------------------------------------
+        # CMS-FIRST: Build tree directly from modulestore (draft branch)
+        # This ensures draft/unpublished content is always included.
+        # ------------------------------------------------------------
+        def _build_modulestore_tree(ms, usage_key, max_depth, current_depth=0):
+            try:
+                item = ms.get_item(usage_key)
+            except Exception as get_item_err:
+                logger.error(f"Failed to get item {usage_key} from modulestore: {get_item_err}")
+                print(f"===> ERROR get_item usage_key={usage_key} err={get_item_err}")
+                return None
+
+            node = {
+                "id": str(item.location),
+                "type": getattr(item.location, 'block_type', getattr(item, 'category', 'unknown')),
+                "display_name": getattr(item, 'display_name', ''),
+                "children": []
+            }
+            try:
+                child_count = len(getattr(item, 'children', []) or [])
+            except Exception:
+                child_count = 0
+            print(f"===> BUILD node id={node['id']} type={node['type']} name={node['display_name']} children_in_ms={child_count} depth={current_depth}")
+
+            # Depth handling: depth=None means full tree; otherwise include children while current_depth < max_depth-1
+            can_descend = (max_depth is None) or (current_depth < (max_depth - 1))
+            if can_descend:
+                for child_key in getattr(item, 'children', []) or []:
+                    child_node = _build_modulestore_tree(ms, child_key, max_depth, current_depth + 1)
+                    if child_node:
+                        node["children"].append(child_node)
+            return node
+
+        def _collect_search_results_from_tree(root_node):
+            results = []
+            if not root_node:
+                return results
+
+            def visit(n):
+                nid = n.get('id', '')
+                ntype = n.get('type', '')
+                nname = n.get('display_name', '') or ''
+                ok = True
+                if search_id and nid != search_id:
+                    ok = False
+                if ok and search_type and ntype != search_type:
+                    ok = False
+                if ok and search_name:
+                    try:
+                        pattern = re.compile(search_name, re.IGNORECASE)
+                    except Exception as rex:
+                        # Invalid regex -> return error-like sentinel
+                        results.append({"__regex_error__": str(rex)})
+                        return
+                    if not pattern.search(nname or ''):
+                        ok = False
+                if ok and (search_id or search_type or search_name):
+                    results.append({
+                        "id": nid,
+                        "type": ntype,
+                        "display_name": nname,
+                    })
+                for c in n.get('children', []) or []:
+                    visit(c)
+            visit(root_node)
+            return results
+
+        try:
+            debug_meta = {
+                "source": "modulestore",
+                "branch_used": None,
+                "transformers_used": [],
+                "acting_user": getattr(_get_acting_user(user_identifier), 'username', None),
+            }
+
+            # Try DRAFT first
+            with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
+                tree = _build_modulestore_tree(store, starting_block_usage_key, depth)
+                debug_meta["branch_used"] = "draft_preferred"
+            print(f"===> modulestore traversal draft_preferred done. has_tree={bool(tree)}")
+            # If draft tree is empty/None, try PUBLISHED
+            if not tree or (isinstance(tree, dict) and not tree.get('children') and tree.get('type') != 'course'):
+                with store.branch_setting(ModuleStoreEnum.Branch.published_only):
+                    tree_p = _build_modulestore_tree(store, starting_block_usage_key, depth)
+                    if tree_p:
+                        tree = tree_p
+                        debug_meta["branch_used"] = "published_only"
+                        print(f"===> modulestore traversal switched to published_only. has_tree={bool(tree)}")
+
+            if tree:
+                response = {
+                    "success": True,
+                    "course_id": str(course_key),
+                    "original_course_id": course_id if course_id != str(course_key) else None,
+                    "root": str(starting_block_usage_key),
+                    "structure": tree,
+                    "_debug": debug_meta,
+                }
+                try:
+                    top_children = len(response.get('structure', {}).get('children', []) or [])
+                except Exception:
+                    top_children = 'n/a'
+                print(f"===> RETURN modulestore TREE branch={debug_meta['branch_used']} top_children={top_children}")
+                # Handle search on the built tree
+                if search_id or search_type or search_name:
+                    sr = _collect_search_results_from_tree(tree)
+                    # Check for regex error sentinel
+                    if sr and isinstance(sr[0], dict) and '__regex_error__' in sr[0]:
+                        return {
+                            "success": False,
+                            "error": "invalid_search_regex",
+                            "message": f"Invalid search_name regex: {sr[0]['__regex_error__']}"
+                        }
+                    response["search_results"] = sr
+                    response["search_count"] = len(sr)
+                return response
+        except Exception as ms_err:
+            logger.warning(f"Modulestore traversal failed, will fallback to course_blocks API: {ms_err}")
+            print(f"===> WARNING modulestore traversal failed, fallback to course_blocks. err={ms_err}")
+
         # Get course blocks structure with cache recovery
         # Use draft branch for Studio courses
         try:
@@ -156,11 +282,13 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                 blocks = get_course_blocks(
                     user=acting_user,
                     starting_block_usage_key=starting_block_usage_key,
-                    transformers=None  # Use default transformers for access control
+                    transformers=[]  # CMS-first: show draft/unpublished content (no default transformers)
                 )
             logger.info(f"Successfully retrieved course blocks for {starting_block_usage_key}")
+            print(f"===> course_blocks SUCCESS draft_preferred starting_block={starting_block_usage_key}")
         except Exception as e:
             logger.error(f"Failed to get course blocks for {starting_block_usage_key}: {e}")
+            print(f"===> ERROR course_blocks initial err={e}")
             
             # Check if it's a cache-related error and try to recover
             error_str = str(e).lower()
@@ -168,22 +296,26 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                 'blockstructurenotfound', 'filenotfounderror', 'no such file or directory'
             ]):
                 logger.info(f"Detected cache issue, attempting to clear and regenerate block structure for {course_key}")
+                print(f"===> CACHE issue detected. Clearing cache for course_key={course_key}")
                 try:
                     # Clear the block structure cache and regenerate
                     from openedx.core.djangoapps.content.block_structure.api import clear_course_from_cache
                     clear_course_from_cache(course_key)
                     logger.info(f"Cleared block structure cache for {course_key}")
+                    print(f"===> CACHE cleared for course_key={course_key}")
                     
                     # Try again after clearing cache
                     with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
                         blocks = get_course_blocks(
                             user=acting_user,
                             starting_block_usage_key=starting_block_usage_key,
-                            transformers=None
+                            transformers=[]  # CMS-first: show draft/unpublished content after cache recovery
                         )
                     logger.info(f"Successfully retrieved course blocks after cache clear for {starting_block_usage_key}")
+                    print(f"===> course_blocks SUCCESS after cache clear starting_block={starting_block_usage_key}")
                 except Exception as retry_error:
                     logger.error(f"Failed to retrieve course blocks even after cache clear: {retry_error}")
+                    print(f"===> ERROR course_blocks after cache clear err={retry_error}")
                     return {
                         "success": False,
                         "error": "course_blocks_cache_recovery_failed",
@@ -192,6 +324,7 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                         "starting_block": str(starting_block_usage_key)
                     }
             else:
+                print(f"===> ERROR course_blocks not cache-related. err={e}")
                 return {
                     "success": False,
                     "error": "course_blocks_not_found",
