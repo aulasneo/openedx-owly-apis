@@ -84,20 +84,36 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
             course_key = CourseKey.from_string(clean_course_id)
             logger.info(f"Parsed course_key: {course_key}")
             
-            # Verify course exists in modulestore
+            # Verify course exists in modulestore (try both draft and published)
             from xmodule.modulestore.django import modulestore
+            from xmodule.modulestore import ModuleStoreEnum
+            
+            # First try draft store (Studio/CMS courses)
             store = modulestore()
+            course = None
+            
             try:
-                course = store.get_course(course_key)
+                # Try draft branch first (Studio courses)
+                with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
+                    course = store.get_course(course_key)
+                    if course:
+                        logger.info(f"Course found in draft modulestore: {course.display_name}")
+                    else:
+                        # Try published branch (LMS courses)
+                        with store.branch_setting(ModuleStoreEnum.Branch.published_only):
+                            course = store.get_course(course_key)
+                            if course:
+                                logger.info(f"Course found in published modulestore: {course.display_name}")
+                
                 if not course:
                     return {
                         "success": False,
                         "error": "course_not_found",
-                        "message": f"Course not found in modulestore: {clean_course_id}",
+                        "message": f"Course not found in any modulestore branch: {clean_course_id}",
                         "original_course_id": course_id,
                         "cleaned_course_id": clean_course_id
                     }
-                logger.info(f"Course found in modulestore: {course.display_name}")
+                    
             except Exception as store_error:
                 logger.error(f"Course not found in modulestore '{clean_course_id}': {store_error}")
                 return {
@@ -134,12 +150,14 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
             logger.info(f"Using course root as starting_block_usage_key: {starting_block_usage_key}")
         
         # Get course blocks structure with cache recovery
+        # Use draft branch for Studio courses
         try:
-            blocks = get_course_blocks(
-                user=acting_user,
-                starting_block_usage_key=starting_block_usage_key,
-                transformers=None  # Use default transformers for access control
-            )
+            with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
+                blocks = get_course_blocks(
+                    user=acting_user,
+                    starting_block_usage_key=starting_block_usage_key,
+                    transformers=None  # Use default transformers for access control
+                )
             logger.info(f"Successfully retrieved course blocks for {starting_block_usage_key}")
         except Exception as e:
             logger.error(f"Failed to get course blocks for {starting_block_usage_key}: {e}")
@@ -157,11 +175,12 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                     logger.info(f"Cleared block structure cache for {course_key}")
                     
                     # Try again after clearing cache
-                    blocks = get_course_blocks(
-                        user=acting_user,
-                        starting_block_usage_key=starting_block_usage_key,
-                        transformers=None
-                    )
+                    with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
+                        blocks = get_course_blocks(
+                            user=acting_user,
+                            starting_block_usage_key=starting_block_usage_key,
+                            transformers=None
+                        )
                     logger.info(f"Successfully retrieved course blocks after cache clear for {starting_block_usage_key}")
                 except Exception as retry_error:
                     logger.error(f"Failed to retrieve course blocks even after cache clear: {retry_error}")

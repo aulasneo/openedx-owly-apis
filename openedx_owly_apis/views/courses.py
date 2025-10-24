@@ -92,7 +92,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         detail=False,
         methods=['get'],
         url_path='tree',
-        permission_classes=[IsAdminOrCourseCreator],
+        permission_classes=[AllowAny],
     )
     def get_course_tree(self, request):
         """
