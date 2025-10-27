@@ -5078,3 +5078,109 @@ def delete_cohort_logic(course_id: str, cohort_id: int, user_identifier=None) ->
             "error": "operation_failed",
             "message": f"Failed to delete cohort: {str(e)}"
         }
+
+
+def get_vertical_contents_logic(course_id: str, vertical_id: str, user_identifier=None) -> dict:
+    try:
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from xmodule.modulestore.django import modulestore
+        from xmodule.modulestore import ModuleStoreEnum
+
+        if not course_id:
+            return {"success": False, "error": "missing_course_id", "message": "course_id is required"}
+        if not vertical_id:
+            return {"success": False, "error": "missing_vertical_id", "message": "vertical_id is required"}
+
+        course_id = _normalize_course_id(course_id)
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            return {"success": False, "error": "user_not_found", "message": "Acting user not found"}
+
+        clean_course_id = course_id.split('+branch@')[0] if '+branch@' in course_id else course_id
+        try:
+            course_key = CourseKey.from_string(clean_course_id)
+        except Exception as e:
+            return {"success": False, "error": "invalid_course_id", "message": f"Invalid course_id format: {str(e)}"}
+
+        try:
+            vertical_key = UsageKey.from_string(vertical_id)
+        except Exception as e:
+            return {"success": False, "error": "invalid_vertical_id", "message": f"Invalid vertical_id format: {str(e)}"}
+
+        store = modulestore()
+        # Only retrieve from published branch (exclude draft)
+        with store.branch_setting(ModuleStoreEnum.Branch.published_only):
+            try:
+                vertical_item = store.get_item(vertical_key)
+            except Exception:
+                vertical_item = None
+        if not vertical_item:
+            return {
+                "success": False,
+                "error": "vertical_not_found",
+                "message": f"Vertical not found in published modulestore: {vertical_id}",
+                "cleaned_course_id": clean_course_id,
+            }
+
+        children = getattr(vertical_item, 'children', []) or []
+
+        def _extract_content(block):
+            block_type = getattr(block.location, 'block_type', getattr(block, 'category', 'unknown'))
+            data = {}
+            if block_type == 'html':
+                data['data'] = getattr(block, 'data', None)
+                if not data['data']:
+                    data['data'] = getattr(block, 'content', None)
+                if not data['data']:
+                    data['data'] = getattr(block, 'source', None)
+            elif block_type == 'problem':
+                data['data'] = getattr(block, 'data', None)
+                data['max_attempts'] = getattr(block, 'max_attempts', None)
+                data['weight'] = getattr(block, 'weight', None)
+            elif block_type == 'video':
+                data['edx_video_id'] = getattr(block, 'edx_video_id', None)
+                data['youtube_id_1_0'] = getattr(block, 'youtube_id_1_0', None)
+                data['html5_sources'] = getattr(block, 'html5_sources', None)
+                data['download_video'] = getattr(block, 'download_video', None)
+                data['transcripts'] = getattr(block, 'transcripts', None)
+            elif block_type == 'discussion':
+                data['discussion_id'] = getattr(block, 'discussion_id', None)
+                data['discussion_target'] = getattr(block, 'discussion_target', None)
+                data['title'] = getattr(block, 'display_name', None)
+            return data
+
+        results = []
+        # Fetch children only from published branch
+        with store.branch_setting(ModuleStoreEnum.Branch.published_only):
+            for child_key in children:
+                try:
+                    child = store.get_item(child_key)
+                except Exception:
+                    child = None
+                if not child:
+                    continue
+                child_type = getattr(child.location, 'block_type', getattr(child, 'category', 'unknown'))
+                entry = {
+                    'id': str(child.location),
+                    'type': child_type,
+                    'display_name': getattr(child, 'display_name', ''),
+                    'graded': getattr(child, 'graded', None),
+                    'content': _extract_content(child),
+                }
+                results.append(entry)
+
+        return {
+            "success": True,
+            "course_id": str(course_key),
+            "vertical": {
+                "id": str(vertical_item.location),
+                "type": getattr(vertical_item.location, 'block_type', getattr(vertical_item, 'category', 'vertical')),
+                "display_name": getattr(vertical_item, 'display_name', ''),
+            },
+            "count": len(results),
+            "children": results,
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to get vertical contents: {str(e)}")
+        return {"success": False, "error": "operation_failed", "message": f"Failed to get vertical contents: {str(e)}"}

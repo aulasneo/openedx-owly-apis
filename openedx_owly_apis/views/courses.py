@@ -23,6 +23,7 @@ from openedx_owly_apis.operations.courses import (
     delete_xblock_logic,
     enable_configure_certificates_logic,
     get_course_tree_logic,
+    get_vertical_contents_logic,
     publish_content_logic,
     update_advanced_settings_logic,
     update_course_settings_logic,
@@ -93,8 +94,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         methods=['get'],
         url_path='tree',
         # permission_classes=[AllowAny],
-        permission_classes=[IsAdminOrCourseStaff],
-
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
     )
     def get_course_tree(self, request):
         """
@@ -195,6 +195,50 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             search_type=search_type,
             search_name=search_name,
             user_identifier=request.user.id
+        )
+
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='unit/contents',
+        permission_classes=[AllowAny],
+        # permission_classes=[IsAuthenticated, IsAdminOrCourseStaff]
+    )
+    def get_unit_contents(self, request):
+        """
+        List the children of a unit (vertical) and return their raw content where possible.
+
+        Query parameters:
+            course_id (str): Course identifier (e.g., "course-v1:Org+Course+Run")
+            vertical_id (str): Usage key of the vertical to inspect
+
+        Returns:
+            JSON with children entries including id, type, display_name, and content payload per block type.
+        """
+        course_id = request.query_params.get('course_id')
+        vertical_id = request.query_params.get('vertical_id')
+
+        if not course_id:
+            return Response({
+                'success': False,
+                'error': 'course_id parameter is required',
+                'error_code': 'missing_course_id'
+            }, status=400)
+
+        if not vertical_id:
+            return Response({
+                'success': False,
+                'error': 'vertical_id parameter is required',
+                'error_code': 'missing_vertical_id'
+            }, status=400)
+
+        result = get_vertical_contents_logic(
+            course_id=course_id,
+            vertical_id=vertical_id,
+            user_identifier=request.user.id,
         )
 
         status_code = 200 if result.get('success') else 400
