@@ -204,8 +204,8 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         detail=False,
         methods=['get'],
         url_path='unit/contents',
-        permission_classes=[AllowAny],
-        # permission_classes=[IsAuthenticated, IsAdminOrCourseStaff]
+        # permission_classes=[AllowAny],
+        permission_classes=[IsAuthenticated]
     )
     def get_unit_contents(self, request):
         """
