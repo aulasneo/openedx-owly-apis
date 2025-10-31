@@ -11,8 +11,8 @@ Change Log
 
 .. There should always be an "Version 1.4.0 (2025-10-22)" section for changes pending release.
 
-Unreleased
-**********
+Version 1.5.0 (2025-10-31)
+**************************
 
 Added
 =====
