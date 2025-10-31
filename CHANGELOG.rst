@@ -11,6 +11,33 @@ Change Log
 
 .. There should always be an "Version 1.4.0 (2025-10-22)" section for changes pending release.
 
+Unreleased
+**********
+
+Added
+=====
+
+* **Course Tree API**:
+  - Add endpoint with search and traversal capabilities
+  - Implement CMS-first course tree building with modulestore traversal and debug logging
+  - Support draft and published modulestore branches
+
+* **Unit Contents**:
+  - Add API endpoint to fetch unit contents and their raw data
+
+* **ORA Grading**:
+  - Add student response extraction and improve workflow handling
+
+Changed
+=======
+
+* Refactor permission to ``IsAdminOrCourseStaff``
+
+Fixed
+=====
+
+* Update permission requirements for unit contents endpoint
+
 Version 1.4.0 (2025-10-22)
 **************************
 
@@ -46,6 +73,8 @@ Changed
 * Enhanced error handling and validation across all endpoints
 * Improved documentation with detailed examples and error scenarios
 * Standardized response formats across all API endpoints
+* Improved submission retrieval logic and error handling in ORA functions
+* Refactored ORA content logic and tests for clarity
 
 Documentation
 =============
@@ -54,6 +83,8 @@ Documentation
 * Detailed ORA workflow documentation with grading examples
 * Cohort management usage examples and best practices
 * Enhanced endpoint documentation with request/response examples
+* Fixed changelog header underline length
+* Formatting cleanups and clarity improvements in ORA documentation
 
 Version 1.2.0 (2025-09-23)
 **************************
