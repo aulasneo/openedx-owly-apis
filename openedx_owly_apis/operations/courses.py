@@ -28,12 +28,18 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
-def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: int = None, 
-                         search_id: str = None, search_type: str = None, search_name: str = None, 
-                         user_identifier=None) -> dict:
+def get_course_tree_logic(
+    course_id: str,
+    starting_block_id: str = None,
+    depth: int = None,
+    search_id: str = None,
+    search_type: str = None,
+    search_name: str = None,
+    user_identifier=None,
+) -> dict:
     """
     Get the tree structure of an OpenedX course with search capabilities.
-    
+
     Args:
         course_id (str): Course identifier (e.g., "course-v1:Org+Course+Run")
         starting_block_id (str, optional): Block ID to start from. If None, starts from course root.
@@ -42,74 +48,81 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
         search_type (str, optional): Exact search by block type (course, chapter, sequential, vertical, etc.)
         search_name (str, optional): Regex search by display_name
         user_identifier: User identifier for access control
-        
+
     Returns:
-        dict: Course tree structure with format:
-        {
-            "course_id": "course-v1:...",
-            "root": "block-v1:...",
-            "structure": {
-                "id": "block-v1:...",
-                "type": "course",
-                "display_name": "Course Name",
-                "children": [...]
-            },
-            "search_results": [...] (if search parameters provided)
-        }
+        dict: Course tree structure with format::
+
+            {
+                "course_id": "course-v1:...",
+                "root": "block-v1:...",
+                "structure": {
+                    "id": "block-v1:...",
+                    "type": "course",
+                    "display_name": "Course Name",
+                    "children": [...]
+                },
+                "search_results": [...] (if search parameters provided)
+            }
     """
     try:
+        from django.contrib.auth import get_user_model
         from lms.djangoapps.course_blocks.api import get_course_blocks
         from opaque_keys.edx.keys import CourseKey, UsageKey
-        from django.contrib.auth import get_user_model
-        
+
         logger.info(
-            "get_course_tree start course_id=%s starting_block_id=%s depth=%s search_id=%s search_type=%s search_name=%s user=%s",
-            course_id, starting_block_id, depth, search_id, search_type, search_name, str(user_identifier)
+            "get_course_tree start course_id=%s starting_block_id=%s depth=%s "
+            "search_id=%s search_type=%s search_name=%s user=%s",
+            course_id,
+            starting_block_id,
+            depth,
+            search_id,
+            search_type,
+            search_name,
+            str(user_identifier),
         )
-        print(f"===> get_course_tree START course_id={course_id} starting_block_id={starting_block_id} depth={depth} user={user_identifier}")
-        
+
         User = get_user_model()
         acting_user = _get_acting_user(user_identifier)
-        
+
         if not acting_user:
             return {"success": False, "error": "No acting user available"}
-        
+
         # Parse course key and handle branch issues
         try:
             # Clean course_id to remove any branch information that might cause issues
             clean_course_id = course_id
             if '+branch@' in course_id:
                 clean_course_id = course_id.split('+branch@')[0]
-                logger.info(f"Cleaned course_id from '{course_id}' to '{clean_course_id}'")
-            
+                logger.info("Cleaned course_id from '%s' to '%s'", course_id, clean_course_id)
+
             course_key = CourseKey.from_string(clean_course_id)
-            logger.info(f"Parsed course_key: {course_key}")
-            print(f"===> parsed course_key={course_key}")
-            
+            logger.info("Parsed course_key: %s", course_key)
+
             # Verify course exists in modulestore (try both draft and published)
-            from xmodule.modulestore.django import modulestore
             from xmodule.modulestore import ModuleStoreEnum
-            
+            from xmodule.modulestore.django import modulestore
+
             # First try draft store (Studio/CMS courses)
             store = modulestore()
             course = None
-            
+
             try:
                 # Try draft branch first (Studio courses)
                 with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
                     course = store.get_course(course_key)
                     if course:
-                        logger.info(f"Course found in modulestore: {course.display_name}")
-                        print(f"===> modulestore COURSE FOUND name={getattr(course, 'display_name', '')}")
+                        logger.info("Course found in modulestore: %s", course.display_name)
                     else:
                         # Try published branch (LMS courses)
                         with store.branch_setting(ModuleStoreEnum.Branch.published_only):
                             course = store.get_course(course_key)
                             if course:
-                                logger.info(f"Course found in modulestore: {course.display_name}")
-                                print(f"===> modulestore COURSE FOUND name={getattr(course, 'display_name', '')}")
-                                logger.info(f"Course found in published modulestore: {course.display_name}")
-                
+                                logger.info("Course found in modulestore: %s", course.display_name)
+                                logger.info(
+                                    "Course found in published modulestore: %s",
+                                    course.display_name,
+                                )
+
                 if not course:
                     return {
                         "success": False,
@@ -118,17 +131,24 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                         "original_course_id": course_id,
                         "cleaned_course_id": clean_course_id
                     }
-                    
+
             except Exception as store_error:
-                logger.error(f"Course not found in modulestore '{clean_course_id}': {store_error}")
+                logger.error(
+                    "Course not found in modulestore '%s': %s",
+                    clean_course_id,
+                    store_error,
+                )
                 return {
                     "success": False,
                     "error": "course_not_in_modulestore",
-                    "message": f"Course not found in modulestore: {clean_course_id}. Error: {str(store_error)}",
+                    "message": (
+                        f"Course not found in modulestore: {clean_course_id}. "
+                        f"Error: {str(store_error)}"
+                    ),
                     "original_course_id": course_id,
                     "cleaned_course_id": clean_course_id
                 }
-                
+
         except Exception as e:
             logger.error(f"Failed to parse course_id '{course_id}': {e}")
             return {
@@ -136,24 +156,33 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                 "error": "invalid_course_id",
                 "message": f"Invalid course_id format: {course_id}. Error: {str(e)}"
             }
-        
+
         # Determine starting block
         if starting_block_id:
             try:
                 starting_block_usage_key = UsageKey.from_string(starting_block_id)
-                logger.info(f"Using provided starting_block_usage_key: {starting_block_usage_key}")
+                logger.info("Using provided starting_block_usage_key: %s", starting_block_usage_key)
             except Exception as e:
-                logger.error(f"Failed to parse starting_block_id '{starting_block_id}': {e}")
+                logger.error(
+                    "Failed to parse starting_block_id '%s': %s",
+                    starting_block_id,
+                    e,
+                )
                 return {
                     "success": False,
                     "error": "invalid_starting_block_id",
-                    "message": f"Invalid starting_block_id format: {starting_block_id}. Error: {str(e)}"
+                    "message": (
+                        f"Invalid starting_block_id format: {starting_block_id}. "
+                        f"Error: {str(e)}"
+                    )
                 }
         else:
             # Use course root as starting block
             starting_block_usage_key = course_key.make_usage_key('course', 'course')
-            logger.info(f"Using course root as starting_block_usage_key: {starting_block_usage_key}")
-            print(f"===> starting_block_usage_key={starting_block_usage_key}")
+            logger.info(
+                "Using course root as starting_block_usage_key: %s",
+                starting_block_usage_key,
+            )
 
         # ------------------------------------------------------------
         # CMS-FIRST: Build tree directly from modulestore (draft branch)
@@ -177,8 +206,6 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                 child_count = len(getattr(item, 'children', []) or [])
             except Exception:
                 child_count = 0
-            print(f"===> BUILD node id={node['id']} type={node['type']} name={node['display_name']} children_in_ms={child_count} depth={current_depth}")
-
             # Depth handling: depth=None means full tree; otherwise include children while current_depth < max_depth-1
             can_descend = (max_depth is None) or (current_depth < (max_depth - 1))
             if can_descend:
@@ -282,44 +309,72 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                 blocks = get_course_blocks(
                     user=acting_user,
                     starting_block_usage_key=starting_block_usage_key,
-                    transformers=[]  # CMS-first: show draft/unpublished content (no default transformers)
+                    transformers=[],  # CMS-first: show draft/unpublished content (no default transformers)
                 )
-            logger.info(f"Successfully retrieved course blocks for {starting_block_usage_key}")
-            print(f"===> course_blocks SUCCESS draft_preferred starting_block={starting_block_usage_key}")
+            logger.info(
+                "Successfully retrieved course blocks for %s",
+                starting_block_usage_key,
+            )
+            print(
+                f"===> course_blocks SUCCESS draft_preferred "
+                f"starting_block={starting_block_usage_key}"
+            )
         except Exception as e:
-            logger.error(f"Failed to get course blocks for {starting_block_usage_key}: {e}")
-            print(f"===> ERROR course_blocks initial err={e}")
-            
+            logger.error(
+                "Failed to get course blocks for %s: %s",
+                starting_block_usage_key,
+                e,
+            )
             # Check if it's a cache-related error and try to recover
             error_str = str(e).lower()
-            if any(cache_error in error_str for cache_error in [
-                'blockstructurenotfound', 'filenotfounderror', 'no such file or directory'
-            ]):
-                logger.info(f"Detected cache issue, attempting to clear and regenerate block structure for {course_key}")
-                print(f"===> CACHE issue detected. Clearing cache for course_key={course_key}")
+            if any(
+                cache_error in error_str
+                for cache_error in [
+                    'blockstructurenotfound', 'filenotfounderror', 'no such file or directory'
+                ]
+            ):
+                logger.info(
+                    "Detected cache issue, attempting to clear and regenerate block structure for %s",
+                    course_key,
+                )
+                print(
+                    f"===> CACHE issue detected. Clearing cache for course_key={course_key}"
+                )
                 try:
                     # Clear the block structure cache and regenerate
                     from openedx.core.djangoapps.content.block_structure.api import clear_course_from_cache
                     clear_course_from_cache(course_key)
-                    logger.info(f"Cleared block structure cache for {course_key}")
-                    print(f"===> CACHE cleared for course_key={course_key}")
-                    
+                    logger.info("Cleared block structure cache for %s", course_key)
                     # Try again after clearing cache
                     with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
                         blocks = get_course_blocks(
                             user=acting_user,
                             starting_block_usage_key=starting_block_usage_key,
-                            transformers=[]  # CMS-first: show draft/unpublished content after cache recovery
+                            transformers=[],  # CMS-first: show draft/unpublished content after cache recovery
                         )
-                    logger.info(f"Successfully retrieved course blocks after cache clear for {starting_block_usage_key}")
-                    print(f"===> course_blocks SUCCESS after cache clear starting_block={starting_block_usage_key}")
+                    logger.info(
+                        "Successfully retrieved course blocks after cache clear for %s",
+                        starting_block_usage_key,
+                    )
+                    print(
+                        f"===> course_blocks SUCCESS after cache clear "
+                        f"starting_block={starting_block_usage_key}"
+                    )
                 except Exception as retry_error:
-                    logger.error(f"Failed to retrieve course blocks even after cache clear: {retry_error}")
-                    print(f"===> ERROR course_blocks after cache clear err={retry_error}")
+                    logger.error(
+                        "Failed to retrieve course blocks even after cache clear: %s",
+                        retry_error,
+                    )
+                    print(
+                        f"===> ERROR course_blocks after cache clear err={retry_error}"
+                    )
                     return {
                         "success": False,
                         "error": "course_blocks_cache_recovery_failed",
-                        "message": f"Could not retrieve course blocks even after cache recovery. Original error: {str(e)}. Retry error: {str(retry_error)}",
+                        "message": (
+                            "Could not retrieve course blocks even after cache recovery. "
+                            f"Original error: {str(e)}. Retry error: {str(retry_error)}"
+                        ),
                         "course_id": course_id,
                         "starting_block": str(starting_block_usage_key)
                     }
@@ -328,25 +383,28 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                 return {
                     "success": False,
                     "error": "course_blocks_not_found",
-                    "message": f"Could not retrieve course blocks. Course may not exist or you may not have access. Error: {str(e)}",
+                    "message": (
+                        "Could not retrieve course blocks. Course may not exist or you may not "
+                        f"have access. Error: {str(e)}"
+                    ),
                     "course_id": course_id,
                     "starting_block": str(starting_block_usage_key)
                 }
-        
+
         if not blocks:
             return {
                 "success": False,
                 "error": "course_not_found",
                 "message": f"Course not found or no access: {course_id}"
             }
-        
+
         # Search functionality
         search_results = []
         has_search = search_id or search_type or search_name
-        
+
         if has_search:
             import re
-            
+
             # Compile regex pattern for name search if provided
             name_pattern = None
             if search_name:
@@ -358,53 +416,53 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                         "error": "invalid_regex",
                         "message": f"Invalid regex pattern in search_name: {e}"
                     }
-            
+
             # Search through all blocks
             for block_key in blocks:
                 block_type = blocks.get_xblock_field(block_key, 'category')
                 display_name = blocks.get_xblock_field(block_key, 'display_name') or ''
                 block_id = str(block_key)
-                
+
                 # Check search criteria
                 matches = True
-                
+
                 # Exact ID match
                 if search_id and search_id != block_id:
                     matches = False
-                
+
                 # Exact type match
                 if search_type and search_type != block_type:
                     matches = False
-                
+
                 # Regex name match
                 if search_name and name_pattern and not name_pattern.search(display_name):
                     matches = False
-                
+
                 if matches:
                     search_results.append({
                         "id": block_id,
                         "type": block_type,
                         "display_name": display_name
                     })
-        
+
         def build_tree_node(usage_key, current_depth=0):
             """Recursively build tree node with children"""
-            
+
             # Check depth limit
             if depth is not None and current_depth >= depth:
                 return None
-            
+
             # Get block information
             block_type = blocks.get_xblock_field(usage_key, 'category')
             display_name = blocks.get_xblock_field(usage_key, 'display_name') or ''
-            
+
             # Create node
             node = {
                 "id": str(usage_key),
                 "type": block_type,
                 "display_name": display_name
             }
-            
+
             # Get children
             children = blocks.get_children(usage_key)
             if children and (depth is None or current_depth < depth - 1):
@@ -413,22 +471,22 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
                     child_node = build_tree_node(child_key, current_depth + 1)
                     if child_node:
                         child_nodes.append(child_node)
-                
+
                 if child_nodes:
                     node["children"] = child_nodes
-            
+
             return node
-        
+
         # Build the tree structure
         root_node = build_tree_node(starting_block_usage_key)
-        
+
         if not root_node:
             return {
                 "success": False,
                 "error": "no_structure",
                 "message": "No accessible structure found"
             }
-        
+
         result = {
             "success": True,
             "course_id": clean_course_id,
@@ -436,14 +494,14 @@ def get_course_tree_logic(course_id: str, starting_block_id: str = None, depth: 
             "root": str(starting_block_usage_key),
             "structure": root_node
         }
-        
+
         # Add search results if search was performed
         if has_search:
             result["search_results"] = search_results
             result["search_count"] = len(search_results)
-        
+
         return result
-        
+
     except Exception as e:
         logger.exception(f"Error getting course tree: {e}")
         return {
@@ -5083,8 +5141,8 @@ def delete_cohort_logic(course_id: str, cohort_id: int, user_identifier=None) ->
 def get_vertical_contents_logic(course_id: str, vertical_id: str, user_identifier=None) -> dict:
     try:
         from opaque_keys.edx.keys import CourseKey, UsageKey
-        from xmodule.modulestore.django import modulestore
         from xmodule.modulestore import ModuleStoreEnum
+        from xmodule.modulestore.django import modulestore
 
         if not course_id:
             return {"success": False, "error": "missing_course_id", "message": "course_id is required"}
@@ -5105,7 +5163,7 @@ def get_vertical_contents_logic(course_id: str, vertical_id: str, user_identifie
         try:
             vertical_key = UsageKey.from_string(vertical_id)
         except Exception as e:
-            return {"success": False, "error": "invalid_vertical_id", "message": f"Invalid vertical_id format: {str(e)}"}
+            return {"success": False, "error": {str(e)}}
 
         store = modulestore()
         # Only retrieve from published branch (exclude draft)
@@ -5183,4 +5241,247 @@ def get_vertical_contents_logic(course_id: str, vertical_id: str, user_identifie
 
     except Exception as e:
         logger.exception(f"Failed to get vertical contents: {str(e)}")
-        return {"success": False, "error": "operation_failed", "message": f"Failed to get vertical contents: {str(e)}"}
+        return {
+            "success": False,
+            "error": "operation_failed",
+            "message": f"Failed to get vertical contents: {str(e)}",
+        }
+
+
+def send_bulk_email_logic(
+    course_id: str,
+    subject: str,
+    body: str,
+    targets=None,
+    cohort_id: int | None = None,
+    schedule: str | None = None,
+    template_name: str | None = None,
+    from_addr: str | None = None,
+    user_identifier=None,
+) -> dict:
+    """
+    Send a bulk email in a course using Open edX internal APIs (no SessionAuth required).
+
+    This uses lms.djangoapps.bulk_email.api.create_course_email and
+    lms.djangoapps.instructor_task.api.submit_bulk_course_email, which enqueue the
+    background task for sending.
+
+    Args:
+        course_id: Course identifier (e.g., "course-v1:Org+Course+Run").
+        subject: Email subject (<=128 chars).
+        body: HTML body for the email message.
+        targets: Optional list of target strings, e.g. ["myself", "staff", "learners",
+                 "cohort:MyCohort", "track:verified"]. If omitted and cohort_id is provided,
+                 the cohort will be resolved and used as a single target.
+        cohort_id: Optional numeric cohort id to resolve a single cohort target.
+        schedule: Optional ISO-8601 datetime string (UTC) to schedule sending in the future.
+        template_name: Optional CourseEmailTemplate name.
+        from_addr: Optional custom "from" address.
+        user_identifier: Acting user (id/username/email) – must have instructor/staff rights.
+
+    Returns:
+        dict: { success: bool, message: str, email_id: int, scheduled_at: str|null }
+    """
+    # Local imports to avoid heavy module import at module load and circular refs.
+    import datetime
+    from typing import List
+
+    import pytz
+    from dateutil import parser as date_parser
+    from django.test.client import RequestFactory
+    # Open edX bulk email APIs
+    from lms.djangoapps.bulk_email.api import create_course_email
+    from lms.djangoapps.instructor_task import api as instructor_task_api
+    from opaque_keys.edx.keys import CourseKey
+    from openedx.core.djangoapps.course_groups.models import CourseUserGroup
+    try:
+        # Prefer platform-defined constant when available
+        from openedx.core.djangoapps.course_groups.models import COHORT_GROUP  # type: ignore
+    except Exception:  # Fallback for platforms without exported constant
+        COHORT_GROUP = 'cohort'  # type: ignore
+
+    try:
+        if not course_id:
+            return {
+                "success": False,
+                "message": "course_id is required",
+            }
+
+        # Normalize and parse course key
+        normalized_course_id = _normalize_course_id(course_id)
+        course_key = CourseKey.from_string(normalized_course_id)
+
+        if not subject:
+            return {
+                "success": False,
+                "message": "subject is required",
+            }
+
+        if not body:
+            return {
+                "success": False,
+                "message": "message body is required",
+            }
+
+        # Acting user (must be Instructor/Staff for the course)
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            return {
+                "success": False,
+                "message": "acting user could not be resolved",
+            }
+
+        # Build targets list
+        resolved_targets: List[str] = []
+        if targets and isinstance(targets, list):
+            resolved_targets = [str(t) for t in targets]
+        elif cohort_id is not None:
+            # Resolve cohort name by id and form "cohort:<name>" target
+            cohort = CourseUserGroup.objects.filter(
+                id=cohort_id,
+                course_id=course_key,
+                group_type=COHORT_GROUP,
+            ).first()
+            if not cohort:
+                return {
+                    "success": False,
+                    "message": f"Cohort with id={cohort_id} not found for course {normalized_course_id}",
+                }
+            resolved_targets = [f"cohort:{cohort.name}"]
+        else:
+            # Default to sending to "myself" if nothing provided – safe test mode
+            resolved_targets = ["myself"]
+
+        # Create CourseEmail record (validates targets and feature flags internally)
+        try:
+            email = create_course_email(
+                course_key,
+                acting_user,
+                resolved_targets,
+                subject,
+                body,
+                template_name=template_name,
+                from_addr=from_addr,
+            )
+        except ValueError as exc:
+            return {
+                "success": False,
+                "message": f"Error creating course email: {exc}",
+            }
+
+        # Prepare optional schedule
+        schedule_dt = None
+        if schedule:
+            try:
+                schedule_dt = date_parser.parse(schedule)
+                if schedule_dt.tzinfo is None:
+                    schedule_dt = schedule_dt.replace(tzinfo=pytz.UTC)
+                else:
+                    schedule_dt = schedule_dt.astimezone(pytz.UTC)
+                now_utc = datetime.datetime.now(pytz.UTC)
+                if schedule_dt < now_utc:
+                    return {
+                        "success": False,
+                        "message": "schedule must be a future datetime (UTC)",
+                    }
+            except (ValueError, TypeError) as exc:
+                return {
+                    "success": False,
+                    "message": f"Invalid schedule datetime: {exc}",
+                }
+
+        # Submit instructor task (requires a request with user for attribution)
+        rf = RequestFactory()
+        fake_request = rf.post("/")
+        fake_request.user = acting_user
+
+        # This will enqueue immediately or create a schedule entry
+        instructor_task_api.submit_bulk_course_email(
+            fake_request,
+            course_key,
+            email.id,
+            schedule_dt,
+        )
+        # Build a human-friendly recipients preview when possible
+        recipients_preview = {}
+        try:
+            # Include acting user's email when targeting 'myself'
+            if any(t.strip().lower() == 'myself' for t in resolved_targets):
+                recipients_preview['myself_email'] = getattr(acting_user, 'email', None)
+
+            # If a cohort target was used, include cohort basic info
+            cohort_target = next((t for t in resolved_targets if t.startswith('cohort:')), None)
+            if cohort_target:
+                cohort_name = cohort_target.split(':', 1)[1]
+                # Try to fetch cohort again by name to get count (best-effort)
+                cohort_qs = CourseUserGroup.objects.filter(
+                    course_id=course_key,
+                    name=cohort_name,
+                    group_type=COHORT_GROUP,
+                )
+                cohort_obj = cohort_qs.first()
+                if cohort_obj:
+                    recipients_preview['cohort'] = {
+                        'name': cohort_obj.name,
+                        'member_count': cohort_obj.users.count(),
+                    }
+
+            # For learners, return a count (best-effort)
+            if any(t.strip().lower() == 'learners' for t in resolved_targets):
+                try:
+                    from common.djangoapps.student.models import CourseEnrollment  # type: ignore
+                    learners_count = CourseEnrollment.objects.filter(
+                        course_id=course_key,
+                        is_active=True,
+                    ).count()
+                    recipients_preview['learners_count'] = learners_count
+                except Exception:  # noqa: BLE001 - optional info only
+                    pass
+
+            # For staff, try to include a count (best-effort)
+            if any(t.strip().lower() == 'staff' for t in resolved_targets):
+                try:
+                    from common.djangoapps.student.roles import CourseStaffRole  # type: ignore
+                    staff_role = CourseStaffRole(course_key)
+                    recipients_preview['staff_count'] = len(list(staff_role.users_with_role()))
+                except Exception:  # noqa: BLE001 - optional info only
+                    pass
+        except Exception:  # noqa: BLE001 - guard preview building
+            recipients_preview = {}
+
+        # Resolve effective from address if not explicitly set
+        effective_from_addr = getattr(email, 'from_addr', None) or from_addr
+        if not effective_from_addr:
+            try:
+                from django.conf import settings  # type: ignore
+                effective_from_addr = (
+                    getattr(settings, 'BULK_EMAIL_DEFAULT_FROM_EMAIL', None)
+                    or getattr(settings, 'BULK_EMAIL_FROM_EMAIL', None)
+                    or getattr(settings, 'DEFAULT_FROM_EMAIL', None)
+                )
+            except Exception:
+                effective_from_addr = None
+
+        # Build response without nulls when possible
+        resp = {
+            "success": True,
+            "message": "Bulk email queued successfully",
+            "email_id": email.id,
+            "targets": resolved_targets,
+            "course_id": normalized_course_id,
+        }
+        if effective_from_addr:
+            resp["from_addr"] = effective_from_addr
+        if schedule_dt:
+            resp["scheduled_at"] = schedule_dt.isoformat()
+        if recipients_preview:
+            resp["recipients_preview"] = recipients_preview
+
+        return resp
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.exception("send_bulk_email_logic failed: %s", exc)
+        return {
+            "success": False,
+            "message": f"Unexpected error sending bulk email: {exc}",
+        }

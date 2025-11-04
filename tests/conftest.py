@@ -156,6 +156,9 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_courses.remove_user_from_cohort_logic = _simple_ret("remove_user_from_cohort_logic")
     ops_courses.list_cohort_members_logic = _simple_ret("list_cohort_members_logic")
     ops_courses.delete_cohort_logic = _simple_ret("delete_cohort_logic")
+    ops_courses.get_course_tree_logic = _simple_ret("get_course_tree_logic")
+    ops_courses.get_vertical_contents_logic = _simple_ret("get_vertical_contents_logic")
+    ops_courses.send_bulk_email_logic = _simple_ret("send_bulk_email_logic")
     sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
     stubs.append("openedx_owly_apis.operations.courses")
 
@@ -189,6 +192,48 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_config.is_owly_chat_enabled_logic = _cfg_logic
     sys.modules["openedx_owly_apis.operations.config"] = ops_config
     stubs.append("openedx_owly_apis.operations.config")
+
+    # Add send_bulk_email_logic stub to the courses operations module
+    def _mk_courses_stub(name):
+        def _fn(*args, **kwargs):
+            return {"success": True, "called": name, "kwargs": kwargs}
+        return _fn
+
+    # Ensure the courses operations module exists and add the bulk email stub
+    if "openedx_owly_apis.operations.courses" not in sys.modules:
+        ops_courses = types.ModuleType("openedx_owly_apis.operations.courses")
+        sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
+    else:
+        ops_courses = sys.modules["openedx_owly_apis.operations.courses"]
+
+    # Add all the course operation stubs
+    ops_courses.send_bulk_email_logic = _mk_courses_stub("send_bulk_email_logic")
+    ops_courses.create_course_logic = _mk_courses_stub("create_course_logic")
+    ops_courses.update_course_settings_logic = _mk_courses_stub("update_course_settings_logic")
+    ops_courses.create_course_structure_logic = _mk_courses_stub("create_course_structure_logic")
+    ops_courses.add_html_content_logic = _mk_courses_stub("add_html_content_logic")
+    ops_courses.add_video_content_logic = _mk_courses_stub("add_video_content_logic")
+    ops_courses.add_problem_content_logic = _mk_courses_stub("add_problem_content_logic")
+    ops_courses.add_discussion_content_logic = _mk_courses_stub("add_discussion_content_logic")
+    ops_courses.enable_configure_certificates_logic = _mk_courses_stub("enable_configure_certificates_logic")
+    ops_courses.toggle_certificate_simple_logic = _mk_courses_stub("toggle_certificate_simple_logic")
+    ops_courses.control_unit_availability_logic = _mk_courses_stub("control_unit_availability_logic")
+    ops_courses.update_advanced_settings_logic = _mk_courses_stub("update_advanced_settings_logic")
+    ops_courses.manage_course_staff_logic = _mk_courses_stub("manage_course_staff_logic")
+    ops_courses.list_course_staff_logic = _mk_courses_stub("list_course_staff_logic")
+    ops_courses.add_ora_content_logic = _mk_courses_stub("add_ora_content_logic")
+    ops_courses.grade_ora_content_logic = _mk_courses_stub("grade_ora_content_logic")
+    ops_courses.get_ora_details_logic = _mk_courses_stub("get_ora_details_logic")
+    ops_courses.list_ora_submissions_logic = _mk_courses_stub("list_ora_submissions_logic")
+    ops_courses.create_cohort_logic = _mk_courses_stub("create_cohort_logic")
+    ops_courses.list_cohorts_logic = _mk_courses_stub("list_cohorts_logic")
+    ops_courses.add_user_to_cohort_logic = _mk_courses_stub("add_user_to_cohort_logic")
+    ops_courses.remove_user_from_cohort_logic = _mk_courses_stub("remove_user_from_cohort_logic")
+    ops_courses.list_cohort_members_logic = _mk_courses_stub("list_cohort_members_logic")
+    ops_courses.delete_cohort_logic = _mk_courses_stub("delete_cohort_logic")
+    ops_courses.create_openedx_problem_logic = _mk_courses_stub("create_openedx_problem_logic")
+    ops_courses.publish_content_logic = _mk_courses_stub("publish_content_logic")
+    ops_courses.delete_xblock_logic = _mk_courses_stub("delete_xblock_logic")
 
     try:
         yield

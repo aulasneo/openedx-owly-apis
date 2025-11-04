@@ -2,12 +2,16 @@
 OpenedX Course Management ViewSet
 ViewSet simple que mapea directamente las funciones de lógica existentes
 """
+import json
+
+from django.db import transaction
+from django.utils.decorators import method_decorator
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
 from openedx.core.lib.api.authentication import BearerAuthentication
 from rest_framework import viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 # Importar funciones lógicas originales
@@ -25,6 +29,7 @@ from openedx_owly_apis.operations.courses import (
     get_course_tree_logic,
     get_vertical_contents_logic,
     publish_content_logic,
+    send_bulk_email_logic,
     update_advanced_settings_logic,
     update_course_settings_logic,
 )
@@ -35,6 +40,7 @@ from openedx_owly_apis.permissions import (
 )
 
 
+@method_decorator(transaction.non_atomic_requests, name='dispatch')
 class OpenedXCourseViewSet(viewsets.ViewSet):
     """
     ViewSet para gestión de cursos OpenedX - mapeo directo de funciones MCP
@@ -121,7 +127,9 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024&depth=2
 
             # Get subtree starting from a specific chapter
-            GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024&starting_block_id=block-v1:TestX+CS101+2024+type@chapter+block@chapter1
+            GET /api/v1/owly-courses/tree/
+            ?course_id=course-v1:TestX+CS101+2024
+            &starting_block_id=block-v1:TestX+CS101+2024+type@chapter+block@chapter1
 
             # Search examples
             # Find all video components
@@ -131,36 +139,39 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024&search_name=.*quiz.*
 
             # Find specific block by ID
-            GET /api/v1/owly-courses/tree/?course_id=course-v1:TestX+CS101+2024&search_id=block-v1:TestX+CS101+2024+type@html+block@abc123
+            GET /api/v1/owly-courses/tree/
+            ?course_id=course-v1:TestX+CS101+2024
+            &search_id=block-v1:TestX+CS101+2024+type@html+block@abc123
 
         Returns:
-            JSON response with course tree structure:
-            {
-                "success": true,
-                "course_id": "course-v1:...",
-                "root": "block-v1:...",
-                "structure": {
-                    "id": "block-v1:...",
-                    "type": "course",
-                    "display_name": "Course Name",
-                    "children": [
+            JSON response with course tree structure::
+
+                {
+                    "success": true,
+                    "course_id": "course-v1:...",
+                    "root": "block-v1:...",
+                    "structure": {
+                        "id": "block-v1:...",
+                        "type": "course",
+                        "display_name": "Course Name",
+                        "children": [
+                            {
+                                "id": "block-v1:...",
+                                "type": "chapter",
+                                "display_name": "Chapter 1",
+                                "children": [...]
+                            }
+                        ]
+                    },
+                    "search_results": [  // Only present when search parameters are used
                         {
                             "id": "block-v1:...",
-                            "type": "chapter",
-                            "display_name": "Chapter 1",
-                            "children": [...]
+                            "type": "video",
+                            "display_name": "Introduction Video"
                         }
-                    ]
-                },
-                "search_results": [  // Only present when search parameters are used
-                    {
-                        "id": "block-v1:...",
-                        "type": "video",
-                        "display_name": "Introduction Video"
-                    }
-                ],
-                "search_count": 1  // Only present when search parameters are used
-            }
+                    ],
+                    "search_count": 1  // Only present when search parameters are used
+                }
         """
         course_id = request.query_params.get('course_id')
         starting_block_id = request.query_params.get('starting_block_id')
@@ -1105,5 +1116,96 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
 
+        status_code = 200 if result.get('success') else 400
+        return Response(result, status=status_code)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='bulk/send_email',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def send_bulk_email(self, request):
+        """Send bulk email in a course using Open edX internal APIs.
+
+        Body parameters:
+            - subject (str): Email subject (required)
+            - message (str): HTML body (required)
+            - targets (list[str] | str): Optional. Examples: ["myself", "staff", "learners",
+              "cohort:MyCohort", "track:verified"]. If a string is provided and looks like
+              a JSON array, it will be parsed.
+            - cohort_id (int): Optional. If provided and targets is not set, will target that cohort.
+            - schedule (str): Optional ISO-8601 datetime (UTC) for scheduling.
+            - template_name (str): Optional CourseEmailTemplate name.
+            - from_addr (str): Optional custom email "from" address.
+            - course_id (str): Course identifier (e.g., "course-v1:Org+Course+Run"). Required.
+        """
+        data = request.data
+        course_id = data.get('course_id')
+        subject = data.get('subject')
+        message = data.get('body') or data.get('message')
+        targets = data.get('targets')
+        cohort_id = data.get('cohort_id')
+        schedule = data.get('schedule')
+        template_name = data.get('template_name')
+        from_addr = data.get('from_addr')
+
+        if not course_id:
+            return Response({
+                'success': False,
+                'error': 'course_id is required in body',
+                'error_code': 'missing_course_id'
+            }, status=400)
+
+        if not subject:
+            return Response({
+                'success': False,
+                'error': 'subject is required in body',
+                'error_code': 'missing_subject'
+            }, status=400)
+
+        if not message:
+            return Response({
+                'success': False,
+                'error': 'body is required in body',
+                'error_code': 'missing_body'
+            }, status=400)
+
+        # Normalize targets: accept list or JSON-stringified list
+        parsed_targets = None
+        if isinstance(targets, list):
+            parsed_targets = targets
+        elif isinstance(targets, str):
+            stripped = targets.strip()
+            if stripped.startswith('[') and stripped.endswith(']'):
+                try:
+                    parsed_targets = json.loads(stripped)
+                except json.JSONDecodeError:
+                    return Response({
+                        'success': False,
+                        'error': 'targets must be a valid JSON array or comma-separated string',
+                        'error_code': 'invalid_targets_format'
+                    }, status=400)
+            elif stripped:
+                # Allow comma-separated short form: "staff,learners"
+                parsed_targets = [t.strip() for t in stripped.split(',') if t.strip()]
+        elif targets is not None:
+            return Response({
+                'success': False,
+                'error': 'targets must be a list, JSON string, or comma-separated string',
+                'error_code': 'invalid_targets_format'
+            }, status=400)
+
+        result = send_bulk_email_logic(
+            course_id=course_id,
+            subject=subject,
+            body=message,
+            targets=parsed_targets,
+            cohort_id=cohort_id,
+            schedule=schedule,
+            template_name=template_name,
+            from_addr=from_addr,
+            user_identifier=request.user.id,
+        )
         status_code = 200 if result.get('success') else 400
         return Response(result, status=status_code)

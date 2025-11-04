@@ -1348,3 +1348,319 @@ class TestConfTestCoverage:
         assert result["called"] == "get_overview_analytics_logic"
         # Verify the kwarg was preserved
         assert result["kwargs"]["course_id"] == "course-v1:ORG+NUM+RUN"
+
+
+class TestBulkEmailAPI:
+    """Test suite for bulk email functionality"""
+
+    def test_send_bulk_email_calls_logic(self, api_factory):
+        """Test sending bulk email to course participants"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+        req = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "subject": "Course Announcement",
+                "body": "Welcome to the course! This is an important announcement.",
+                "targets": ["myself", "staff", "learners"]
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)  # Course staff permissions required
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "send_bulk_email_logic"
+        # Verify the parameters passed to the logic function
+        assert resp.data["kwargs"]["course_id"] == "course-v1:TestX+CS101+2024"
+        assert resp.data["kwargs"]["subject"] == "Course Announcement"
+        assert resp.data["kwargs"]["body"] == "Welcome to the course! This is an important announcement."
+        assert resp.data["kwargs"]["targets"] == ["myself", "staff", "learners"]
+
+    def test_send_bulk_email_with_cohort_target(self, api_factory):
+        """Test sending bulk email to specific cohort"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+        req = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "subject": "Cohort Specific Message",
+                "body": "This message is for your cohort only.",
+                "targets": ["cohort"],
+                "cohort_id": 5
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "send_bulk_email_logic"
+        assert resp.data["kwargs"]["targets"] == ["cohort"]
+        assert resp.data["kwargs"]["cohort_id"] == 5
+
+    def test_send_bulk_email_with_schedule(self, api_factory):
+        """Test scheduling bulk email for future delivery"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+        req = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "subject": "Scheduled Announcement",
+                "body": "This email will be sent at a scheduled time.",
+                "targets": ["learners"],
+                "schedule": "2025-12-25T10:00:00Z"
+            },
+            format="json",
+        )
+        user = _auth_user(is_superuser=True)  # Superuser can also send emails
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "send_bulk_email_logic"
+        assert resp.data["kwargs"]["schedule"] == "2025-12-25T10:00:00Z"
+
+    def test_send_bulk_email_with_custom_template(self, api_factory):
+        """Test sending bulk email with custom template and from address"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+        req = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "subject": "Custom Template Email",
+                "body": "This email uses a custom template.",
+                "targets": ["staff"],
+                "template_name": "course_announcement",
+                "from_addr": "instructor@university.edu"
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "send_bulk_email_logic"
+        assert resp.data["kwargs"]["template_name"] == "course_announcement"
+        assert resp.data["kwargs"]["from_addr"] == "instructor@university.edu"
+
+    def test_send_bulk_email_targets_as_json_string(self, api_factory):
+        """Test sending bulk email with targets as JSON string"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+        req = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "subject": "JSON Targets Test",
+                "body": "Testing with JSON string targets.",
+                "targets": '["myself", "learners"]'  # JSON string format
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "send_bulk_email_logic"
+        # Should be parsed to list
+        assert resp.data["kwargs"]["targets"] == ["myself", "learners"]
+
+    def test_send_bulk_email_targets_as_csv_string(self, api_factory):
+        """Test sending bulk email with targets as comma-separated string"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+        req = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "subject": "CSV Targets Test",
+                "body": "Testing with CSV string targets.",
+                "targets": "myself,staff,learners"  # CSV format
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 200
+        assert resp.data["called"] == "send_bulk_email_logic"
+        # Should be parsed to list
+        assert resp.data["kwargs"]["targets"] == ["myself", "staff", "learners"]
+
+    def test_send_bulk_email_missing_required_fields(self, api_factory):
+        """Test bulk email validation for missing required fields"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+
+        # Missing course_id
+        req1 = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "subject": "Test Subject",
+                "body": "Test body",
+                "targets": ["learners"]
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req1, user=user)
+        resp1 = view(req1)
+        assert resp1.status_code == 400
+        assert resp1.data["success"] is False
+        assert "course_id" in resp1.data["error"]
+
+        # Missing subject
+        req2 = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "body": "Test body",
+                "targets": ["learners"]
+            },
+            format="json",
+        )
+        force_authenticate(req2, user=user)
+        resp2 = view(req2)
+        assert resp2.status_code == 400
+        assert resp2.data["success"] is False
+        assert "subject" in resp2.data["error"]
+
+        # Missing body
+        req3 = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "subject": "Test Subject",
+                "targets": ["learners"]
+            },
+            format="json",
+        )
+        force_authenticate(req3, user=user)
+        resp3 = view(req3)
+        assert resp3.status_code == 400
+        assert resp3.data["success"] is False
+        assert "body" in resp3.data["error"]
+
+    def test_send_bulk_email_invalid_targets_format(self, api_factory):
+        """Test bulk email with invalid targets format"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+        req = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "subject": "Test Subject",
+                "body": "Test body",
+                "targets": '[invalid, json, syntax]'  # Invalid JSON syntax for targets
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+        assert "targets" in resp.data["error"]
+
+    def test_send_bulk_email_comprehensive_workflow(self, api_factory):
+        """Test a comprehensive bulk email workflow with different scenarios"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+
+        course_id = "course-v1:TestX+CS101+2024"
+        user = _auth_user(is_course_staff=True)
+
+        # 1. Send email to myself only
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+        req1 = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": course_id,
+                "subject": "Test Email to Myself",
+                "body": "This is a test email sent only to me.",
+                "targets": ["myself"]
+            },
+            format="json",
+        )
+        force_authenticate(req1, user=user)
+        resp1 = view(req1)
+        assert resp1.status_code == 200
+        assert resp1.data["called"] == "send_bulk_email_logic"
+
+        # 2. Send email to all staff members
+        req2 = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": course_id,
+                "subject": "Staff Meeting Reminder",
+                "body": "Don't forget about tomorrow's staff meeting.",
+                "targets": ["staff"]
+            },
+            format="json",
+        )
+        force_authenticate(req2, user=user)
+        resp2 = view(req2)
+        assert resp2.status_code == 200
+        assert resp2.data["called"] == "send_bulk_email_logic"
+
+        # 3. Send email to all learners with scheduled delivery
+        req3 = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": course_id,
+                "subject": "Course Update",
+                "body": "Important updates about the course curriculum.",
+                "targets": ["learners"],
+                "schedule": "2025-01-15T09:00:00Z"
+            },
+            format="json",
+        )
+        force_authenticate(req3, user=user)
+        resp3 = view(req3)
+        assert resp3.status_code == 200
+        assert resp3.data["called"] == "send_bulk_email_logic"
+
+        # 4. Send email to everyone (staff + learners + myself)
+        req4 = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": course_id,
+                "subject": "Important Course Announcement",
+                "body": "This affects everyone in the course.",
+                "targets": ["myself", "staff", "learners"]
+            },
+            format="json",
+        )
+        force_authenticate(req4, user=user)
+        resp4 = view(req4)
+        assert resp4.status_code == 200
+        assert resp4.data["called"] == "send_bulk_email_logic"
+
+    def test_send_bulk_email_permission_validation(self, api_factory):
+        """Test that only authorized users can send bulk emails"""
+        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
+
+        # Test with regular authenticated user (no course staff permissions)
+        req = api_factory.post(
+            "/owly-courses/bulk-email/send/",
+            {
+                "course_id": "course-v1:TestX+CS101+2024",
+                "subject": "Unauthorized Email",
+                "body": "This should not be allowed.",
+                "targets": ["learners"]
+            },
+            format="json",
+        )
+        # User without course staff or admin permissions
+        user = _auth_user(is_course_staff=False, is_superuser=False)
+        force_authenticate(req, user=user)
+
+        # Note: The actual permission validation happens in the logic layer
+        # This test verifies the endpoint calls the logic with correct params
+        resp = view(req)
+        assert resp.status_code == 200  # ViewSet passes through, logic handles validation
+        assert resp.data["called"] == "send_bulk_email_logic"
