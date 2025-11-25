@@ -5485,3 +5485,871 @@ def send_bulk_email_logic(
             "success": False,
             "message": f"Unexpected error sending bulk email: {exc}",
         }
+
+
+# =====================================
+# CONTENT GROUP MANAGEMENT FUNCTIONS
+# =====================================
+
+def list_content_groups_logic(course_id: str, user_identifier=None) -> dict:
+    """
+    List all content groups in a course.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        user_identifier: User requesting the information
+
+    Returns:
+        dict: Success/error response with list of content groups
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        # Get acting user
+        User = get_user_model()
+        if user_identifier:
+            acting_user = User.objects.get(id=user_identifier)
+        else:
+            return {
+                "success": False,
+                "error": "missing_user",
+                "message": "User identifier is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        normalized_course_id = course_id.replace(' ', '+')
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(normalized_course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import content groups modules
+        try:
+            from openedx.core.djangoapps.content_groups.models import ContentGroup
+        except ImportError:
+            return {
+                "success": False,
+                "error": "content_groups_not_available",
+                "message": "Content groups functionality not available"
+            }
+
+        # Get content groups for the course
+        content_groups = ContentGroup.objects.filter(course_id=course_key)
+
+        groups_data = []
+        for group in content_groups:
+            groups_data.append({
+                "id": group.id,
+                "name": group.name,
+                "description": group.description or "",
+                "course_id": str(course_key),
+                "created_at": group.created_at.isoformat() if hasattr(group, 'created_at') else None,
+                "updated_at": group.updated_at.isoformat() if hasattr(group, 'updated_at') else None
+            })
+
+        logger.info(
+            f"Listed {len(groups_data)} content groups for course {course_id} "
+            f"by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "course_id": course_id,
+            "content_groups": groups_data,
+            "total_groups": len(groups_data)
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to list content groups: {str(e)}")
+        return {
+            "success": False,
+            "error": "content_groups_list_failed",
+            "message": f"Failed to list content groups: {str(e)}"
+        }
+
+
+def create_content_group_logic(course_id: str, name: str, description: str = "", user_identifier=None) -> dict:
+    """
+    Create a new content group in a course.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        name (str): Name for the new content group
+        description (str): Description for the content group
+        user_identifier: User creating the content group
+
+    Returns:
+        dict: Success/error response with content group details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not name:
+            return {
+                "success": False,
+                "error": "missing_name",
+                "message": "name is required"
+            }
+
+        # Get acting user
+        User = get_user_model()
+        if user_identifier:
+            acting_user = User.objects.get(id=user_identifier)
+        else:
+            return {
+                "success": False,
+                "error": "missing_user",
+                "message": "User identifier is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        normalized_course_id = course_id.replace(' ', '+')
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(normalized_course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import content groups modules
+        try:
+            from openedx.core.djangoapps.content_groups.models import ContentGroup
+        except ImportError:
+            return {
+                "success": False,
+                "error": "content_groups_not_available",
+                "message": "Content groups functionality not available"
+            }
+
+        # Check if content group with same name already exists
+        existing_group = ContentGroup.objects.filter(course_id=course_key, name=name).first()
+        if existing_group:
+            return {
+                "success": False,
+                "error": "content_group_exists",
+                "message": f"Content group with name '{name}' already exists in this course"
+            }
+
+        # Create the content group
+        content_group = ContentGroup.objects.create(
+            course_id=course_key,
+            name=name,
+            description=description
+        )
+
+        logger.info(
+            f"Successfully created content group '{name}' in course {course_id} "
+            f"by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "content_group": {
+                "id": content_group.id,
+                "name": content_group.name,
+                "description": content_group.description,
+                "course_id": str(course_key),
+                "created_by": acting_user.username
+            },
+            "message": f"Content group '{name}' created successfully"
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to create content group: {str(e)}")
+        return {
+            "success": False,
+            "error": "content_group_creation_failed",
+            "message": f"Failed to create content group: {str(e)}"
+        }
+
+
+def update_content_group_logic(course_id: str, group_id: int, name: str = None, description: str = None, user_identifier=None) -> dict:
+    """
+    Update an existing content group.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        group_id (int): ID of the content group to update
+        name (str): New name for the content group (optional)
+        description (str): New description for the content group (optional)
+        user_identifier: User updating the content group
+
+    Returns:
+        dict: Success/error response with updated content group details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not group_id:
+            return {
+                "success": False,
+                "error": "missing_group_id",
+                "message": "group_id is required"
+            }
+
+        # Get acting user
+        User = get_user_model()
+        if user_identifier:
+            acting_user = User.objects.get(id=user_identifier)
+        else:
+            return {
+                "success": False,
+                "error": "missing_user",
+                "message": "User identifier is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        normalized_course_id = course_id.replace(' ', '+')
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(normalized_course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import content groups modules
+        try:
+            from openedx.core.djangoapps.content_groups.models import ContentGroup
+        except ImportError:
+            return {
+                "success": False,
+                "error": "content_groups_not_available",
+                "message": "Content groups functionality not available"
+            }
+
+        # Get the content group
+        try:
+            content_group = ContentGroup.objects.get(id=group_id, course_id=course_key)
+        except ContentGroup.DoesNotExist:
+            return {
+                "success": False,
+                "error": "content_group_not_found",
+                "message": f"Content group with ID {group_id} not found in course {course_id}"
+            }
+
+        # Update fields if provided
+        updated_fields = []
+        if name is not None:
+            # Check if another group with same name exists
+            existing_group = ContentGroup.objects.filter(
+                course_id=course_key, 
+                name=name
+            ).exclude(id=group_id).first()
+            
+            if existing_group:
+                return {
+                    "success": False,
+                    "error": "content_group_name_exists",
+                    "message": f"Another content group with name '{name}' already exists in this course"
+                }
+            
+            content_group.name = name
+            updated_fields.append("name")
+
+        if description is not None:
+            content_group.description = description
+            updated_fields.append("description")
+
+        if updated_fields:
+            content_group.save()
+
+        logger.info(
+            f"Successfully updated content group {group_id} ({', '.join(updated_fields)}) "
+            f"in course {course_id} by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "content_group": {
+                "id": content_group.id,
+                "name": content_group.name,
+                "description": content_group.description,
+                "course_id": str(course_key),
+                "updated_by": acting_user.username,
+                "updated_fields": updated_fields
+            },
+            "message": f"Content group updated successfully"
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to update content group: {str(e)}")
+        return {
+            "success": False,
+            "error": "content_group_update_failed",
+            "message": f"Failed to update content group: {str(e)}"
+        }
+
+
+def delete_content_group_logic(course_id: str, group_id: int, user_identifier=None) -> dict:
+    """
+    Delete a content group from a course.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        group_id (int): ID of the content group to delete
+        user_identifier: User performing the action
+
+    Returns:
+        dict: Success/error response with operation details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not group_id:
+            return {
+                "success": False,
+                "error": "missing_group_id",
+                "message": "group_id is required"
+            }
+
+        # Get acting user
+        User = get_user_model()
+        if user_identifier:
+            acting_user = User.objects.get(id=user_identifier)
+        else:
+            return {
+                "success": False,
+                "error": "missing_user",
+                "message": "User identifier is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        normalized_course_id = course_id.replace(' ', '+')
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(normalized_course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import content groups modules
+        try:
+            from openedx.core.djangoapps.content_groups.models import ContentGroup
+        except ImportError:
+            return {
+                "success": False,
+                "error": "content_groups_not_available",
+                "message": "Content groups functionality not available"
+            }
+
+        # Get the content group
+        try:
+            content_group = ContentGroup.objects.get(id=group_id, course_id=course_key)
+        except ContentGroup.DoesNotExist:
+            return {
+                "success": False,
+                "error": "content_group_not_found",
+                "message": f"Content group with ID {group_id} not found in course {course_id}"
+            }
+
+        # Store group info before deletion
+        group_name = content_group.name
+
+        # Delete the content group
+        content_group.delete()
+
+        logger.info(
+            f"Successfully deleted content group '{group_name}' (ID: {group_id}) "
+            f"from course {course_id} by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "message": f"Content group '{group_name}' deleted successfully",
+            "deleted_group": {
+                "id": group_id,
+                "name": group_name,
+                "course_id": str(course_key),
+                "deleted_by": acting_user.username
+            }
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to delete content group: {str(e)}")
+        return {
+            "success": False,
+            "error": "content_group_deletion_failed",
+            "message": f"Failed to delete content group: {str(e)}"
+        }
+
+
+def assign_content_group_to_cohort_logic(course_id: str, content_group_id: int, cohort_id: int, user_identifier=None) -> dict:
+    """
+    Assign a content group to a cohort.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        content_group_id (int): ID of the content group
+        cohort_id (int): ID of the cohort to assign to
+        user_identifier: User performing the action
+
+    Returns:
+        dict: Success/error response with assignment details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not content_group_id:
+            return {
+                "success": False,
+                "error": "missing_content_group_id",
+                "message": "content_group_id is required"
+            }
+
+        if not cohort_id:
+            return {
+                "success": False,
+                "error": "missing_cohort_id",
+                "message": "cohort_id is required"
+            }
+
+        # Get acting user
+        User = get_user_model()
+        if user_identifier:
+            acting_user = User.objects.get(id=user_identifier)
+        else:
+            return {
+                "success": False,
+                "error": "missing_user",
+                "message": "User identifier is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        normalized_course_id = course_id.replace(' ', '+')
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(normalized_course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import required modules
+        try:
+            from openedx.core.djangoapps.content_groups.models import ContentGroup
+            from openedx.core.djangoapps.course_groups.cohorts import get_cohort_by_id
+            from openedx.core.djangoapps.course_groups.models import CourseCohort
+        except ImportError:
+            return {
+                "success": False,
+                "error": "modules_not_available",
+                "message": "Required modules not available"
+            }
+
+        # Verify content group exists
+        try:
+            content_group = ContentGroup.objects.get(id=content_group_id, course_id=course_key)
+        except ContentGroup.DoesNotExist:
+            return {
+                "success": False,
+                "error": "content_group_not_found",
+                "message": f"Content group with ID {content_group_id} not found in course {course_id}"
+            }
+
+        # Verify cohort exists
+        try:
+            cohort = get_cohort_by_id(course_key, cohort_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "cohort_not_found",
+                "message": f"Cohort with ID {cohort_id} not found in course {course_id}: {str(e)}"
+            }
+
+        # Get or create the CourseCohort relationship
+        try:
+            course_cohort, created = CourseCohort.objects.get_or_create(
+                course_user_group=cohort,
+                defaults={'assignment_type': 'manual'}
+            )
+            
+            # Assign the content group to the cohort
+            course_cohort.content_group = content_group
+            course_cohort.save()
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "assignment_failed",
+                "message": f"Failed to assign content group to cohort: {str(e)}"
+            }
+
+        logger.info(
+            f"Successfully assigned content group '{content_group.name}' (ID: {content_group_id}) "
+            f"to cohort '{cohort.name}' (ID: {cohort_id}) in course {course_id} "
+            f"by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "message": f"Content group '{content_group.name}' assigned to cohort '{cohort.name}' successfully",
+            "assignment": {
+                "content_group": {
+                    "id": content_group.id,
+                    "name": content_group.name
+                },
+                "cohort": {
+                    "id": cohort.id,
+                    "name": cohort.name
+                },
+                "course_id": str(course_key),
+                "assigned_by": acting_user.username
+            }
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to assign content group to cohort: {str(e)}")
+        return {
+            "success": False,
+            "error": "assignment_failed",
+            "message": f"Failed to assign content group to cohort: {str(e)}"
+        }
+
+
+def unassign_content_group_from_cohort_logic(course_id: str, content_group_id: int, cohort_id: int, user_identifier=None) -> dict:
+    """
+    Remove assignment of a content group from a cohort.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        content_group_id (int): ID of the content group
+        cohort_id (int): ID of the cohort to unassign from
+        user_identifier: User performing the action
+
+    Returns:
+        dict: Success/error response with unassignment details
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        if not content_group_id:
+            return {
+                "success": False,
+                "error": "missing_content_group_id",
+                "message": "content_group_id is required"
+            }
+
+        if not cohort_id:
+            return {
+                "success": False,
+                "error": "missing_cohort_id",
+                "message": "cohort_id is required"
+            }
+
+        # Get acting user
+        User = get_user_model()
+        if user_identifier:
+            acting_user = User.objects.get(id=user_identifier)
+        else:
+            return {
+                "success": False,
+                "error": "missing_user",
+                "message": "User identifier is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        normalized_course_id = course_id.replace(' ', '+')
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(normalized_course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import required modules
+        try:
+            from openedx.core.djangoapps.content_groups.models import ContentGroup
+            from openedx.core.djangoapps.course_groups.cohorts import get_cohort_by_id
+            from openedx.core.djangoapps.course_groups.models import CourseCohort
+        except ImportError:
+            return {
+                "success": False,
+                "error": "modules_not_available",
+                "message": "Required modules not available"
+            }
+
+        # Verify content group exists
+        try:
+            content_group = ContentGroup.objects.get(id=content_group_id, course_id=course_key)
+        except ContentGroup.DoesNotExist:
+            return {
+                "success": False,
+                "error": "content_group_not_found",
+                "message": f"Content group with ID {content_group_id} not found in course {course_id}"
+            }
+
+        # Verify cohort exists
+        try:
+            cohort = get_cohort_by_id(course_key, cohort_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "cohort_not_found",
+                "message": f"Cohort with ID {cohort_id} not found in course {course_id}: {str(e)}"
+            }
+
+        # Find and update the CourseCohort relationship
+        try:
+            course_cohort = CourseCohort.objects.get(course_user_group=cohort)
+            
+            # Check if the content group is actually assigned
+            if course_cohort.content_group != content_group:
+                return {
+                    "success": False,
+                    "error": "not_assigned",
+                    "message": f"Content group '{content_group.name}' is not assigned to cohort '{cohort.name}'"
+                }
+            
+            # Remove the content group assignment
+            course_cohort.content_group = None
+            course_cohort.save()
+
+        except CourseCohort.DoesNotExist:
+            return {
+                "success": False,
+                "error": "cohort_relationship_not_found",
+                "message": f"No content group assignment found for cohort '{cohort.name}'"
+            }
+
+        logger.info(
+            f"Successfully unassigned content group '{content_group.name}' (ID: {content_group_id}) "
+            f"from cohort '{cohort.name}' (ID: {cohort_id}) in course {course_id} "
+            f"by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "message": f"Content group '{content_group.name}' unassigned from cohort '{cohort.name}' successfully",
+            "unassignment": {
+                "content_group": {
+                    "id": content_group.id,
+                    "name": content_group.name
+                },
+                "cohort": {
+                    "id": cohort.id,
+                    "name": cohort.name
+                },
+                "course_id": str(course_key),
+                "unassigned_by": acting_user.username
+            }
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to unassign content group from cohort: {str(e)}")
+        return {
+            "success": False,
+            "error": "unassignment_failed",
+            "message": f"Failed to unassign content group from cohort: {str(e)}"
+        }
+
+
+def list_content_group_cohort_assignments_logic(course_id: str, user_identifier=None) -> dict:
+    """
+    List all content group to cohort assignments for a course.
+
+    Args:
+        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
+        user_identifier: User requesting the information
+
+    Returns:
+        dict: Success/error response with list of assignments
+    """
+    from django.contrib.auth import get_user_model
+    from opaque_keys.edx.keys import CourseKey
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Validate inputs
+        if not course_id:
+            return {
+                "success": False,
+                "error": "missing_course_id",
+                "message": "course_id is required"
+            }
+
+        # Get acting user
+        User = get_user_model()
+        if user_identifier:
+            acting_user = User.objects.get(id=user_identifier)
+        else:
+            return {
+                "success": False,
+                "error": "missing_user",
+                "message": "User identifier is required"
+            }
+
+        # Normalize course_id (replace spaces with '+')
+        normalized_course_id = course_id.replace(' ', '+')
+
+        # Parse course key
+        try:
+            course_key = CourseKey.from_string(normalized_course_id)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "invalid_course_id",
+                "message": f"Invalid course_id format: {str(e)}"
+            }
+
+        # Import required modules
+        try:
+            from openedx.core.djangoapps.content_groups.models import ContentGroup
+            from openedx.core.djangoapps.course_groups.models import CourseCohort
+        except ImportError:
+            return {
+                "success": False,
+                "error": "modules_not_available",
+                "message": "Required modules not available"
+            }
+
+        # Get all content groups for the course
+        content_groups = ContentGroup.objects.filter(course_id=course_key)
+        
+        # Get all cohort assignments with content groups
+        cohort_assignments = CourseCohort.objects.filter(
+            course_user_group__course_id=course_key,
+            content_group__isnull=False
+        ).select_related('content_group', 'course_user_group')
+
+        assignments_data = []
+        for assignment in cohort_assignments:
+            assignments_data.append({
+                "content_group": {
+                    "id": assignment.content_group.id,
+                    "name": assignment.content_group.name,
+                    "description": assignment.content_group.description or ""
+                },
+                "cohort": {
+                    "id": assignment.course_user_group.id,
+                    "name": assignment.course_user_group.name
+                },
+                "assignment_type": assignment.assignment_type,
+                "course_id": str(course_key)
+            })
+
+        # Also include unassigned content groups
+        assigned_group_ids = [assignment.content_group.id for assignment in cohort_assignments]
+        unassigned_groups = content_groups.exclude(id__in=assigned_group_ids)
+        
+        unassigned_data = []
+        for group in unassigned_groups:
+            unassigned_data.append({
+                "id": group.id,
+                "name": group.name,
+                "description": group.description or ""
+            })
+
+        logger.info(
+            f"Listed {len(assignments_data)} content group assignments and "
+            f"{len(unassigned_data)} unassigned groups for course {course_id} "
+            f"by user {acting_user.username}"
+        )
+
+        return {
+            "success": True,
+            "course_id": course_id,
+            "assignments": assignments_data,
+            "unassigned_content_groups": unassigned_data,
+            "total_assignments": len(assignments_data),
+            "total_unassigned": len(unassigned_data)
+        }
+
+    except Exception as e:
+        logger.exception(f"Failed to list content group assignments: {str(e)}")
+        return {
+            "success": False,
+            "error": "assignments_list_failed",
+            "message": f"Failed to list content group assignments: {str(e)}"
+        }

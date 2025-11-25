@@ -159,6 +159,35 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_courses.get_course_tree_logic = _simple_ret("get_course_tree_logic")
     ops_courses.get_vertical_contents_logic = _simple_ret("get_vertical_contents_logic")
     ops_courses.send_bulk_email_logic = _simple_ret("send_bulk_email_logic")
+    # Content Groups v2 API stubs with proper parameter handling
+    def list_content_groups_logic(course_id, user_identifier=None):
+        return {"success": True, "called": "list_content_groups_logic", "course_id": course_id, "user_identifier": user_identifier}
+    
+    def create_content_group_logic(course_id, name, description=None, user_identifier=None):
+        return {"success": True, "called": "create_content_group_logic", "course_id": course_id, "name": name, "description": description, "user_identifier": user_identifier}
+    
+    def update_content_group_logic(group_id, course_id, name=None, description=None, user_identifier=None):
+        return {"success": True, "called": "update_content_group_logic", "group_id": group_id, "course_id": course_id, "name": name, "description": description, "user_identifier": user_identifier}
+    
+    def delete_content_group_logic(group_id, course_id, user_identifier=None):
+        return {"success": True, "called": "delete_content_group_logic", "group_id": group_id, "course_id": course_id, "user_identifier": user_identifier}
+    
+    def list_content_group_cohort_assignments_logic(course_id, user_identifier=None):
+        return {"success": True, "called": "list_content_group_cohort_assignments_logic", "course_id": course_id, "user_identifier": user_identifier}
+    
+    def assign_content_group_to_cohort_logic(course_id, content_group_id, cohort_id, user_identifier=None):
+        return {"success": True, "called": "assign_content_group_to_cohort_logic", "course_id": course_id, "content_group_id": content_group_id, "cohort_id": cohort_id, "user_identifier": user_identifier}
+    
+    def unassign_content_group_from_cohort_logic(course_id, content_group_id, cohort_id, user_identifier=None):
+        return {"success": True, "called": "unassign_content_group_from_cohort_logic", "course_id": course_id, "content_group_id": content_group_id, "cohort_id": cohort_id, "user_identifier": user_identifier}
+    
+    ops_courses.list_content_groups_logic = list_content_groups_logic
+    ops_courses.create_content_group_logic = create_content_group_logic
+    ops_courses.update_content_group_logic = update_content_group_logic
+    ops_courses.delete_content_group_logic = delete_content_group_logic
+    ops_courses.list_content_group_cohort_assignments_logic = list_content_group_cohort_assignments_logic
+    ops_courses.assign_content_group_to_cohort_logic = assign_content_group_to_cohort_logic
+    ops_courses.unassign_content_group_from_cohort_logic = unassign_content_group_from_cohort_logic
     sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
     stubs.append("openedx_owly_apis.operations.courses")
 
