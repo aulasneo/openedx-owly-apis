@@ -17,6 +17,6 @@ router.register(r'owly-config', OpenedXConfigViewSet, basename='owly-config')
 
 
 urlpatterns = [
-    path('api/v1/', include(router.urls)),
-    path('api/v2/', include('openedx_owly_apis.views.v2.urls')),
+    path('v1/', include(router.urls)),
+    path('v2/', include('openedx_owly_apis.views.v2.urls')),
 ]

@@ -17,12 +17,12 @@ class OpenedxOwlyApisConfig(AppConfig):
         PluginURLs.CONFIG: {
             'cms.djangoapp': {
                 PluginURLs.NAMESPACE: 'openedx_owly_apis',
-                PluginURLs.REGEX: r'^api/v1/',
+                PluginURLs.REGEX: r'^api/',
                 PluginURLs.RELATIVE_PATH: 'urls',
             },
             'lms.djangoapp': {
                 PluginURLs.NAMESPACE: 'openedx_owly_apis',
-                PluginURLs.REGEX: r'^api/v1/',
+                PluginURLs.REGEX: r'^api/',
                 PluginURLs.RELATIVE_PATH: 'urls',
             },
         },
