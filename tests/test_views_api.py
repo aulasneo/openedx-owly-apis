@@ -1841,3 +1841,365 @@ class TestGradeViewSet:
         except AttributeError as e:
             # Expected in test environment due to JwtAuthentication
             assert "authenticate_header" in str(e)
+
+    def test_retrieve_grade_without_pk(self, api_factory):
+        """Test retrieve without pk returns error."""
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"get": "retrieve"})
+
+        req = api_factory.get("/api/v2/grades/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=None)
+
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+
+    def test_update_grade_without_pk(self, api_factory):
+        """Test update without pk returns error."""
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"put": "update"})
+
+        req = api_factory.put("/api/v2/grades/", {"grade_value": 90}, format="json")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=None)
+
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+
+    def test_update_grade_with_invalid_id(self, api_factory):
+        """Test update with invalid grade_id returns error."""
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"put": "update"})
+
+        invalid_grade_id = "invalid_format"
+        req = api_factory.put(
+            f"/api/v2/grades/{invalid_grade_id}/",
+            {"grade_value": 90},
+            format="json"
+        )
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=invalid_grade_id)
+
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+
+    def test_delete_grade_without_pk(self, api_factory):
+        """Test delete without pk returns error."""
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"delete": "destroy"})
+
+        req = api_factory.delete("/api/v2/grades/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=None)
+
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+
+
+class TestValidators:
+    """Tests for the v2 validators module."""
+
+    def test_parse_grade_id_valid(self):
+        """Test parse_grade_id with valid composite ID."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        grade_id = "course-v1:org+course+run_testuser_block-v1:org+course+run+type@vertical+block@abc"
+        course_id, username, unit_id = parse_grade_id(grade_id)
+
+        assert course_id == "course-v1:org+course+run"
+        assert username == "testuser"
+        assert unit_id == "block-v1:org+course+run+type@vertical+block@abc"
+
+    def test_parse_grade_id_empty(self):
+        """Test parse_grade_id with empty string."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        course_id, username, unit_id = parse_grade_id("")
+        assert course_id is None
+        assert username is None
+        assert unit_id is None
+
+    def test_parse_grade_id_none(self):
+        """Test parse_grade_id with None."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        course_id, username, unit_id = parse_grade_id(None)
+        assert course_id is None
+        assert username is None
+        assert unit_id is None
+
+    def test_parse_grade_id_invalid_format(self):
+        """Test parse_grade_id with invalid format."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        course_id, username, unit_id = parse_grade_id("invalid_format")
+        assert course_id is None
+        assert username is None
+        assert unit_id is None
+
+    def test_parse_grade_id_fallback_parsing(self):
+        """Test parse_grade_id fallback parsing with _block-v1: pattern."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        # This format uses the fallback parsing
+        grade_id = "some_course_testuser_block-v1:org+course+run+type@vertical+block@abc"
+        course_id, username, unit_id = parse_grade_id(grade_id)
+
+        assert course_id == "some_course"
+        assert username == "testuser"
+        assert unit_id == "block-v1:org+course+run+type@vertical+block@abc"
+
+    def test_validate_comment_length_none(self):
+        """Test validate_comment_length with None."""
+        from openedx_owly_apis.views.v2.validators import validate_comment_length
+
+        result = validate_comment_length(None)
+        assert result == ""
+
+    def test_validate_comment_length_valid(self):
+        """Test validate_comment_length with valid comment."""
+        from openedx_owly_apis.views.v2.validators import validate_comment_length
+
+        result = validate_comment_length("  Test comment  ")
+        assert result == "Test comment"
+
+    def test_validate_comment_length_too_long(self):
+        """Test validate_comment_length with too long comment."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_comment_length
+
+        long_comment = "x" * 1001
+        with pytest.raises(serializers.ValidationError):
+            validate_comment_length(long_comment)
+
+    def test_validate_pagination_params_valid(self):
+        """Test validate_pagination_params with valid params."""
+        from openedx_owly_apis.views.v2.validators import validate_pagination_params
+
+        result = validate_pagination_params(1, 20)
+        assert result == {'page': 1, 'page_size': 20}
+
+    def test_validate_pagination_params_invalid_page(self):
+        """Test validate_pagination_params with invalid page."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_pagination_params
+
+        with pytest.raises(serializers.ValidationError):
+            validate_pagination_params(0, 20)
+
+    def test_validate_pagination_params_invalid_page_size(self):
+        """Test validate_pagination_params with invalid page_size."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_pagination_params
+
+        with pytest.raises(serializers.ValidationError):
+            validate_pagination_params(1, 0)
+
+    def test_validate_pagination_params_page_size_too_large(self):
+        """Test validate_pagination_params with page_size too large."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_pagination_params
+
+        with pytest.raises(serializers.ValidationError):
+            validate_pagination_params(1, 101)
+
+    def test_validate_bulk_grade_data_not_list(self):
+        """Test validate_bulk_grade_data with non-list input."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data("not a list")
+
+    def test_validate_bulk_grade_data_empty_list(self):
+        """Test validate_bulk_grade_data with empty list."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data([])
+
+    def test_validate_bulk_grade_data_too_many(self):
+        """Test validate_bulk_grade_data with too many items."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        data = [{"course_id": "test"} for _ in range(101)]
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data(data)
+
+    def test_validate_bulk_grade_data_item_not_dict(self):
+        """Test validate_bulk_grade_data with non-dict item."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data(["not a dict"])
+
+    def test_validate_bulk_grade_data_missing_field(self):
+        """Test validate_bulk_grade_data with missing required field."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        data = [{"course_id": "test", "student_username": "user"}]  # Missing fields
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data(data)
+
+    def test_validate_grade_filters_empty(self):
+        """Test validate_grade_filters with empty filters."""
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        result = validate_grade_filters({})
+        assert not result
+
+    def test_validate_grade_filters_with_pagination(self):
+        """Test validate_grade_filters with pagination params."""
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        result = validate_grade_filters({'page': 2, 'page_size': 50})
+        assert result['page'] == 2
+        assert result['page_size'] == 50
+
+    def test_validate_grade_filters_negative_min_grade(self):
+        """Test validate_grade_filters with negative min_grade."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_filters({'min_grade': -1})
+
+    def test_validate_grade_filters_negative_max_grade(self):
+        """Test validate_grade_filters with negative max_grade_filter."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_filters({'max_grade_filter': -1})
+
+    def test_validate_grade_filters_min_greater_than_max(self):
+        """Test validate_grade_filters with min > max."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_filters({'min_grade': 100, 'max_grade_filter': 50})
+
+    def test_validate_course_id_empty(self):
+        """Test validate_course_id with empty string."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_course_id
+
+        with pytest.raises(serializers.ValidationError):
+            validate_course_id("")
+
+    def test_validate_unit_id_empty(self):
+        """Test validate_unit_id with empty string."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_unit_id
+
+        with pytest.raises(serializers.ValidationError):
+            validate_unit_id("")
+
+    def test_validate_username_empty(self):
+        """Test validate_username with empty string."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        with pytest.raises(serializers.ValidationError):
+            validate_username("")
+
+    def test_validate_username_too_short(self):
+        """Test validate_username with too short username."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        with pytest.raises(serializers.ValidationError):
+            validate_username("a")
+
+    def test_validate_username_too_long(self):
+        """Test validate_username with too long username."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        with pytest.raises(serializers.ValidationError):
+            validate_username("a" * 151)
+
+    def test_validate_username_invalid_chars(self):
+        """Test validate_username with invalid characters."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        with pytest.raises(serializers.ValidationError):
+            validate_username("user@name!")
+
+    def test_validate_username_valid(self):
+        """Test validate_username with valid username."""
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        result = validate_username("valid_user-name.123")
+        assert result == "valid_user-name.123"
+
+    def test_validate_grade_range_negative_grade(self):
+        """Test validate_grade_range with negative grade."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_range(-1, 100)
+
+    def test_validate_grade_range_zero_max(self):
+        """Test validate_grade_range with zero max_grade."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_range(50, 0)
+
+    def test_validate_grade_range_grade_exceeds_max(self):
+        """Test validate_grade_range with grade exceeding max."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_range(150, 100)
+
+    def test_validate_grade_range_max_too_large(self):
+        """Test validate_grade_range with max_grade too large."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_range(50, 10001)
+
+    def test_validate_grade_range_valid(self):
+        """Test validate_grade_range with valid values."""
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        result = validate_grade_range(85.5, 100)
+        assert result == {'grade_value': 85.5, 'max_grade': 100}

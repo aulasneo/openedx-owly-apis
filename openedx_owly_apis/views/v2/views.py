@@ -26,6 +26,7 @@ from .swagger_schemas import (
     swagger_retrieve_grade,
     swagger_update_grade,
 )
+from .validators import parse_grade_id
 
 
 class GradeViewSet(BaseAPIViewSet):
@@ -42,40 +43,6 @@ class GradeViewSet(BaseAPIViewSet):
         SessionAuthentication,
     )
     permission_classes = [IsAuthenticated, IsAdminOrCourseStaff]
-
-    def _parse_grade_id(self, grade_id):
-        """
-        Parse a composite grade ID into its components.
-
-        Args:
-            grade_id (str): Composite grade ID in format 'course_id_student_username_unit_id'
-
-        Returns:
-            tuple: (course_id, student_username, unit_id) or (None, None, None) if parsing fails
-        """
-        try:
-            import re
-
-            # Look for pattern: course-v1:...+...+...+username+block-v1:...
-            match = re.match(r'^(course-v1:[^+]+\+[^+]+\+[^_]+)_([^_]+)_(block-v1:.+)$', grade_id)
-
-            if match:
-                return match.group(1), match.group(2), match.group(3)
-            else:
-                # Fallback: try to parse manually
-                if '_block-v1:' in grade_id:
-                    before_unit, after_unit = grade_id.split('_block-v1:', 1)
-                    unit_id = 'block-v1:' + after_unit
-
-                    parts = before_unit.split('_')
-                    if len(parts) >= 2:
-                        student_username = parts[-1]
-                        course_id = '_'.join(parts[:-1])
-                        return course_id, student_username, unit_id
-
-            return None, None, None
-        except Exception:
-            return None, None, None
 
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""
@@ -137,7 +104,7 @@ class GradeViewSet(BaseAPIViewSet):
             )
 
         # Parse the grade_id to extract components
-        course_id, student_username, unit_id = self._parse_grade_id(pk)
+        course_id, student_username, unit_id = parse_grade_id(pk)
 
         if not all([course_id, student_username, unit_id]):
             return Response(
@@ -187,7 +154,7 @@ class GradeViewSet(BaseAPIViewSet):
             )
 
         # Parse the grade_id to extract components
-        course_id, student_username, unit_id = self._parse_grade_id(pk)
+        course_id, student_username, unit_id = parse_grade_id(pk)
 
         if not all([course_id, student_username, unit_id]):
             return Response(
