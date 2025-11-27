@@ -5488,868 +5488,933 @@ def send_bulk_email_logic(
 
 
 # =====================================
-# CONTENT GROUP MANAGEMENT FUNCTIONS
+# Set grades
 # =====================================
 
-def list_content_groups_logic(course_id: str, user_identifier=None) -> dict:
+def create_grade_logic(
+    course_id: str,
+    student_username: str,
+    unit_id: str,
+    grade_value: float,
+    max_grade: float,
+    comment: str = None,
+    user_identifier=None
+) -> dict:
     """
-    List all content groups in a course.
-
+    Create a new grade for a student in a specific unit.
+    
     Args:
-        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
-        user_identifier: User requesting the information
-
+        course_id (str): Course identifier
+        student_username (str): Username of the student to grade
+        unit_id (str): Unit/problem identifier to grade
+        grade_value (float): Grade value to assign
+        max_grade (float): Maximum possible grade
+        comment (str, optional): Comment for the grade
+        user_identifier: User performing the grading operation
+        
     Returns:
-        dict: Success/error response with list of content groups
+        dict: Result with success status and grade data
     """
-    from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import CourseKey
-
-    logger = logging.getLogger(__name__)
-
     try:
-        # Validate inputs
-        if not course_id:
-            return {
-                "success": False,
-                "error": "missing_course_id",
-                "message": "course_id is required"
-            }
-
-        # Get acting user
+        from django.contrib.auth import get_user_model
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from lms.djangoapps.grades.models import PersistentSubsectionGrade
+        from lms.djangoapps.courseware.models import StudentModule
+        from xmodule.modulestore.django import modulestore
+        from common.djangoapps.student.models import User as StudentUser
+        
         User = get_user_model()
-        if user_identifier:
-            acting_user = User.objects.get(id=user_identifier)
-        else:
+        
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(f"create_grade_logic: User {acting_user.username} creating grade for {student_username}")
+        
+        # Validate course
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+        
+        if not course:
             return {
-                "success": False,
-                "error": "missing_user",
-                "message": "User identifier is required"
+                'success': False,
+                'error': f'Course not found: {course_id}',
+                'course_id': course_id
             }
-
-        # Normalize course_id (replace spaces with '+')
-        normalized_course_id = course_id.replace(' ', '+')
-
-        # Parse course key
+        
+        # Validate student
         try:
-            course_key = CourseKey.from_string(normalized_course_id)
+            student = StudentUser.objects.get(username=student_username)
+        except StudentUser.DoesNotExist:
+            return {
+                'success': False,
+                'error': f'Student not found: {student_username}',
+                'course_id': course_id
+            }
+        
+        # Validate unit
+        try:
+            unit_key = UsageKey.from_string(unit_id)
+            unit = store.get_item(unit_key)
         except Exception as e:
             return {
-                "success": False,
-                "error": "invalid_course_id",
-                "message": f"Invalid course_id format: {str(e)}"
+                'success': False,
+                'error': f'Unit not found: {unit_id}. Error: {str(e)}',
+                'course_id': course_id
             }
-
-        # Import content groups modules
-        try:
-            from openedx.core.djangoapps.content_groups.models import ContentGroup
-        except ImportError:
+        
+        # Validate grade values
+        if grade_value < 0 or max_grade <= 0:
             return {
-                "success": False,
-                "error": "content_groups_not_available",
-                "message": "Content groups functionality not available"
+                'success': False,
+                'error': 'Invalid grade values. Grade must be >= 0 and max_grade must be > 0',
+                'course_id': course_id
             }
-
-        # Get content groups for the course
-        content_groups = ContentGroup.objects.filter(course_id=course_key)
-
-        groups_data = []
-        for group in content_groups:
-            groups_data.append({
-                "id": group.id,
-                "name": group.name,
-                "description": group.description or "",
-                "course_id": str(course_key),
-                "created_at": group.created_at.isoformat() if hasattr(group, 'created_at') else None,
-                "updated_at": group.updated_at.isoformat() if hasattr(group, 'updated_at') else None
-            })
-
-        logger.info(
-            f"Listed {len(groups_data)} content groups for course {course_id} "
-            f"by user {acting_user.username}"
-        )
-
-        return {
-            "success": True,
-            "course_id": course_id,
-            "content_groups": groups_data,
-            "total_groups": len(groups_data)
-        }
-
-    except Exception as e:
-        logger.exception(f"Failed to list content groups: {str(e)}")
-        return {
-            "success": False,
-            "error": "content_groups_list_failed",
-            "message": f"Failed to list content groups: {str(e)}"
-        }
-
-
-def create_content_group_logic(course_id: str, name: str, description: str = "", user_identifier=None) -> dict:
-    """
-    Create a new content group in a course.
-
-    Args:
-        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
-        name (str): Name for the new content group
-        description (str): Description for the content group
-        user_identifier: User creating the content group
-
-    Returns:
-        dict: Success/error response with content group details
-    """
-    from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import CourseKey
-
-    logger = logging.getLogger(__name__)
-
-    try:
-        # Validate inputs
-        if not course_id:
+        
+        if grade_value > max_grade:
             return {
-                "success": False,
-                "error": "missing_course_id",
-                "message": "course_id is required"
+                'success': False,
+                'error': 'Grade value cannot exceed maximum grade',
+                'course_id': course_id
             }
-
-        if not name:
-            return {
-                "success": False,
-                "error": "missing_name",
-                "message": "name is required"
-            }
-
-        # Get acting user
-        User = get_user_model()
-        if user_identifier:
-            acting_user = User.objects.get(id=user_identifier)
-        else:
-            return {
-                "success": False,
-                "error": "missing_user",
-                "message": "User identifier is required"
-            }
-
-        # Normalize course_id (replace spaces with '+')
-        normalized_course_id = course_id.replace(' ', '+')
-
-        # Parse course key
-        try:
-            course_key = CourseKey.from_string(normalized_course_id)
-        except Exception as e:
-            return {
-                "success": False,
-                "error": "invalid_course_id",
-                "message": f"Invalid course_id format: {str(e)}"
-            }
-
-        # Import content groups modules
-        try:
-            from openedx.core.djangoapps.content_groups.models import ContentGroup
-        except ImportError:
-            return {
-                "success": False,
-                "error": "content_groups_not_available",
-                "message": "Content groups functionality not available"
-            }
-
-        # Check if content group with same name already exists
-        existing_group = ContentGroup.objects.filter(course_id=course_key, name=name).first()
-        if existing_group:
-            return {
-                "success": False,
-                "error": "content_group_exists",
-                "message": f"Content group with name '{name}' already exists in this course"
-            }
-
-        # Create the content group
-        content_group = ContentGroup.objects.create(
+        
+        # Create or update the grade using StudentModule
+        import json
+        
+        # Prepare state with comment
+        state_data = {'comment': comment or ''}
+        state_json = json.dumps(state_data)
+        
+        student_module, created = StudentModule.objects.get_or_create(
+            student=student,
             course_id=course_key,
-            name=name,
-            description=description
+            module_state_key=unit_key,
+            defaults={
+                'state': state_json,
+                'grade': grade_value,
+                'max_grade': max_grade,
+                'done': 'na'
+            }
         )
-
-        logger.info(
-            f"Successfully created content group '{name}' in course {course_id} "
-            f"by user {acting_user.username}"
-        )
-
-        return {
-            "success": True,
-            "content_group": {
-                "id": content_group.id,
-                "name": content_group.name,
-                "description": content_group.description,
-                "course_id": str(course_key),
-                "created_by": acting_user.username
-            },
-            "message": f"Content group '{name}' created successfully"
+        
+        if not created:
+            # Update existing grade
+            student_module.grade = grade_value
+            student_module.max_grade = max_grade
+            student_module.state = state_json
+            student_module.save()
+        
+        # Calculate percentage
+        percentage = (grade_value / max_grade) * 100 if max_grade > 0 else 0
+        
+        # Create response data
+        grade_data = {
+            'id': f"{course_id}_{student_username}_{unit_id}",
+            'course_id': course_id,
+            'student_username': student_username,
+            'student_email': student.email,
+            'unit_id': unit_id,
+            'unit_name': getattr(unit, 'display_name', 'Unknown Unit'),
+            'grade_value': float(grade_value),
+            'max_grade': float(max_grade),
+            'percentage': round(percentage, 2),
+            'comment': comment or '',
+            'created_at': timezone.now().isoformat(),
+            'updated_at': timezone.now().isoformat(),
+            'graded_by': acting_user.username
         }
-
+        
+        logger.info(f"Grade created successfully for {student_username} in {unit_id}: {grade_value}/{max_grade}")
+        
+        return {
+            'success': True,
+            'message': 'Grade created successfully',
+            'grade': grade_data,
+            'course_id': course_id
+        }
+        
     except Exception as e:
-        logger.exception(f"Failed to create content group: {str(e)}")
+        logger.error(f"Error creating grade: {e}")
         return {
-            "success": False,
-            "error": "content_group_creation_failed",
-            "message": f"Failed to create content group: {str(e)}"
+            'success': False,
+            'error': f'Error creating grade: {str(e)}',
+            'course_id': course_id
         }
 
 
-def update_content_group_logic(course_id: str, group_id: int, name: str = None, description: str = None, user_identifier=None) -> dict:
+def get_grade_logic(
+    course_id: str,
+    student_username: str,
+    unit_id: str,
+    user_identifier=None
+) -> dict:
     """
-    Update an existing content group.
-
+    Get a specific grade for a student in a unit.
+    
     Args:
-        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
-        group_id (int): ID of the content group to update
-        name (str): New name for the content group (optional)
-        description (str): New description for the content group (optional)
-        user_identifier: User updating the content group
-
+        course_id (str): Course identifier
+        student_username (str): Username of the student
+        unit_id (str): Unit identifier
+        user_identifier: User requesting the grade information
+        
     Returns:
-        dict: Success/error response with updated content group details
+        dict: Result with success status and grade data
     """
-    from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import CourseKey
-
-    logger = logging.getLogger(__name__)
-
     try:
-        # Validate inputs
-        if not course_id:
-            return {
-                "success": False,
-                "error": "missing_course_id",
-                "message": "course_id is required"
-            }
-
-        if not group_id:
-            return {
-                "success": False,
-                "error": "missing_group_id",
-                "message": "group_id is required"
-            }
-
-        # Get acting user
+        from django.contrib.auth import get_user_model
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from lms.djangoapps.courseware.models import StudentModule
+        from xmodule.modulestore.django import modulestore
+        from common.djangoapps.student.models import User as StudentUser
+        
         User = get_user_model()
-        if user_identifier:
-            acting_user = User.objects.get(id=user_identifier)
-        else:
+        
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(f"get_grade_logic: User {acting_user.username} getting grade for {student_username}")
+        
+        # Validate course
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+        
+        if not course:
             return {
-                "success": False,
-                "error": "missing_user",
-                "message": "User identifier is required"
+                'success': False,
+                'error': f'Course not found: {course_id}',
+                'course_id': course_id
             }
-
-        # Normalize course_id (replace spaces with '+')
-        normalized_course_id = course_id.replace(' ', '+')
-
-        # Parse course key
+        
+        # Validate student
         try:
-            course_key = CourseKey.from_string(normalized_course_id)
+            student = StudentUser.objects.get(username=student_username)
+        except StudentUser.DoesNotExist:
+            return {
+                'success': False,
+                'error': f'Student not found: {student_username}',
+                'course_id': course_id
+            }
+        
+        # Validate unit
+        try:
+            unit_key = UsageKey.from_string(unit_id)
+            unit = store.get_item(unit_key)
         except Exception as e:
             return {
-                "success": False,
-                "error": "invalid_course_id",
-                "message": f"Invalid course_id format: {str(e)}"
+                'success': False,
+                'error': f'Unit not found: {unit_id}. Error: {str(e)}',
+                'course_id': course_id
             }
-
-        # Import content groups modules
-        try:
-            from openedx.core.djangoapps.content_groups.models import ContentGroup
-        except ImportError:
-            return {
-                "success": False,
-                "error": "content_groups_not_available",
-                "message": "Content groups functionality not available"
-            }
-
-        # Get the content group
-        try:
-            content_group = ContentGroup.objects.get(id=group_id, course_id=course_key)
-        except ContentGroup.DoesNotExist:
-            return {
-                "success": False,
-                "error": "content_group_not_found",
-                "message": f"Content group with ID {group_id} not found in course {course_id}"
-            }
-
-        # Update fields if provided
-        updated_fields = []
-        if name is not None:
-            # Check if another group with same name exists
-            existing_group = ContentGroup.objects.filter(
-                course_id=course_key, 
-                name=name
-            ).exclude(id=group_id).first()
-            
-            if existing_group:
+        
+        # Get the score based on unit type
+        unit_type = unit_key.block_type
+        logger.info(f"get_grade_logic: Unit type is: {unit_type}")
+        
+        grade_value = 0
+        max_grade = 0
+        created_at = timezone.now()
+        updated_at = timezone.now()
+        graded_by = 'System'
+        comment = ''
+        
+        if unit_type == 'sequential':
+            # For sequential (subsection), check PersistentSubsectionGrade
+            try:
+                from lms.djangoapps.grades.models import PersistentSubsectionGrade
+                subsection_grade = PersistentSubsectionGrade.objects.get(
+                    user_id=student.id,
+                    course_id=course_key,
+                    usage_key=unit_key
+                )
+                grade_value = subsection_grade.earned_graded
+                max_grade = subsection_grade.possible_graded
+                created_at = subsection_grade.created
+                updated_at = subsection_grade.modified
+                logger.info(f"get_grade_logic: Found subsection grade: {grade_value}/{max_grade}")
+            except PersistentSubsectionGrade.DoesNotExist:
                 return {
-                    "success": False,
-                    "error": "content_group_name_exists",
-                    "message": f"Another content group with name '{name}' already exists in this course"
+                    'success': False,
+                    'error': f'No subsection grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
                 }
-            
-            content_group.name = name
-            updated_fields.append("name")
-
-        if description is not None:
-            content_group.description = description
-            updated_fields.append("description")
-
-        if updated_fields:
-            content_group.save()
-
-        logger.info(
-            f"Successfully updated content group {group_id} ({', '.join(updated_fields)}) "
-            f"in course {course_id} by user {acting_user.username}"
-        )
-
-        return {
-            "success": True,
-            "content_group": {
-                "id": content_group.id,
-                "name": content_group.name,
-                "description": content_group.description,
-                "course_id": str(course_key),
-                "updated_by": acting_user.username,
-                "updated_fields": updated_fields
-            },
-            "message": f"Content group updated successfully"
-        }
-
-    except Exception as e:
-        logger.exception(f"Failed to update content group: {str(e)}")
-        return {
-            "success": False,
-            "error": "content_group_update_failed",
-            "message": f"Failed to update content group: {str(e)}"
-        }
-
-
-def delete_content_group_logic(course_id: str, group_id: int, user_identifier=None) -> dict:
-    """
-    Delete a content group from a course.
-
-    Args:
-        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
-        group_id (int): ID of the content group to delete
-        user_identifier: User performing the action
-
-    Returns:
-        dict: Success/error response with operation details
-    """
-    from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import CourseKey
-
-    logger = logging.getLogger(__name__)
-
-    try:
-        # Validate inputs
-        if not course_id:
-            return {
-                "success": False,
-                "error": "missing_course_id",
-                "message": "course_id is required"
-            }
-
-        if not group_id:
-            return {
-                "success": False,
-                "error": "missing_group_id",
-                "message": "group_id is required"
-            }
-
-        # Get acting user
-        User = get_user_model()
-        if user_identifier:
-            acting_user = User.objects.get(id=user_identifier)
         else:
-            return {
-                "success": False,
-                "error": "missing_user",
-                "message": "User identifier is required"
-            }
-
-        # Normalize course_id (replace spaces with '+')
-        normalized_course_id = course_id.replace(' ', '+')
-
-        # Parse course key
-        try:
-            course_key = CourseKey.from_string(normalized_course_id)
-        except Exception as e:
-            return {
-                "success": False,
-                "error": "invalid_course_id",
-                "message": f"Invalid course_id format: {str(e)}"
-            }
-
-        # Import content groups modules
-        try:
-            from openedx.core.djangoapps.content_groups.models import ContentGroup
-        except ImportError:
-            return {
-                "success": False,
-                "error": "content_groups_not_available",
-                "message": "Content groups functionality not available"
-            }
-
-        # Get the content group
-        try:
-            content_group = ContentGroup.objects.get(id=group_id, course_id=course_key)
-        except ContentGroup.DoesNotExist:
-            return {
-                "success": False,
-                "error": "content_group_not_found",
-                "message": f"Content group with ID {group_id} not found in course {course_id}"
-            }
-
-        # Store group info before deletion
-        group_name = content_group.name
-
-        # Delete the content group
-        content_group.delete()
-
-        logger.info(
-            f"Successfully deleted content group '{group_name}' (ID: {group_id}) "
-            f"from course {course_id} by user {acting_user.username}"
-        )
-
-        return {
-            "success": True,
-            "message": f"Content group '{group_name}' deleted successfully",
-            "deleted_group": {
-                "id": group_id,
-                "name": group_name,
-                "course_id": str(course_key),
-                "deleted_by": acting_user.username
-            }
+            # For other types (problem, etc.), check StudentModule
+            try:
+                student_module = StudentModule.objects.get(
+                    student=student,
+                    course_id=course_key,
+                    module_state_key=unit_key
+                )
+                if student_module.grade is None:
+                    return {
+                        'success': False,
+                        'error': f'No grade found for student {student_username} in unit {unit_id}',
+                        'course_id': course_id
+                    }
+                grade_value = student_module.grade
+                max_grade = student_module.max_grade
+                created_at = student_module.created
+                updated_at = student_module.modified
+                
+                # Extract comment from state field
+                try:
+                    import json
+                    if student_module.state:
+                        state_data = json.loads(student_module.state)
+                        comment = state_data.get('comment', '')
+                except (json.JSONDecodeError, AttributeError):
+                    comment = ''
+                    
+                logger.info(f"get_grade_logic: Found student module grade: {grade_value}/{max_grade}")
+            except StudentModule.DoesNotExist:
+                return {
+                    'success': False,
+                    'error': f'No grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
+                }
+        
+        # Calculate percentage
+        percentage = (grade_value / max_grade) * 100 if max_grade > 0 else 0
+        
+        # Create response data
+        grade_data = {
+            'id': f"{course_id}_{student_username}_{unit_id}",
+            'course_id': course_id,
+            'student_username': student_username,
+            'student_email': student.email,
+            'unit_id': unit_id,
+            'unit_name': getattr(unit, 'display_name', 'Unknown Unit'),
+            'grade_value': float(grade_value),
+            'max_grade': float(max_grade),
+            'percentage': round(percentage, 2),
+            'comment': comment,
+            'created_at': created_at.isoformat(),
+            'updated_at': updated_at.isoformat(),
+            'graded_by': graded_by
         }
-
+        
+        logger.info(f"Grade retrieved successfully for {student_username} in {unit_id}")
+        
+        return {
+            'success': True,
+            'grade': grade_data,
+            'course_id': course_id
+        }
+        
     except Exception as e:
-        logger.exception(f"Failed to delete content group: {str(e)}")
+        logger.error(f"Error getting grade: {e}")
         return {
-            "success": False,
-            "error": "content_group_deletion_failed",
-            "message": f"Failed to delete content group: {str(e)}"
+            'success': False,
+            'error': f'Error getting grade: {str(e)}',
+            'course_id': course_id
         }
 
 
-def assign_content_group_to_cohort_logic(course_id: str, content_group_id: int, cohort_id: int, user_identifier=None) -> dict:
+def update_grade_logic(
+    course_id: str,
+    student_username: str,
+    unit_id: str,
+    grade_value: float = None,
+    max_grade: float = None,
+    comment: str = None,
+    user_identifier=None
+) -> dict:
     """
-    Assign a content group to a cohort.
-
+    Update an existing grade for a student in a unit.
+    
     Args:
-        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
-        content_group_id (int): ID of the content group
-        cohort_id (int): ID of the cohort to assign to
-        user_identifier: User performing the action
-
+        course_id (str): Course identifier
+        student_username (str): Username of the student
+        unit_id (str): Unit identifier
+        grade_value (float, optional): New grade value
+        max_grade (float, optional): New maximum grade
+        comment (str, optional): New comment
+        user_identifier: User performing the update
+        
     Returns:
-        dict: Success/error response with assignment details
+        dict: Result with success status and updated grade data
     """
-    from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import CourseKey
-
-    logger = logging.getLogger(__name__)
-
     try:
-        # Validate inputs
-        if not course_id:
-            return {
-                "success": False,
-                "error": "missing_course_id",
-                "message": "course_id is required"
-            }
-
-        if not content_group_id:
-            return {
-                "success": False,
-                "error": "missing_content_group_id",
-                "message": "content_group_id is required"
-            }
-
-        if not cohort_id:
-            return {
-                "success": False,
-                "error": "missing_cohort_id",
-                "message": "cohort_id is required"
-            }
-
-        # Get acting user
+        from django.contrib.auth import get_user_model
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from lms.djangoapps.courseware.models import StudentModule
+        from xmodule.modulestore.django import modulestore
+        from common.djangoapps.student.models import User as StudentUser
+        
         User = get_user_model()
-        if user_identifier:
-            acting_user = User.objects.get(id=user_identifier)
-        else:
+        
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(f"update_grade_logic: User {acting_user.username} updating grade for {student_username}")
+        
+        # Validate course
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+        
+        if not course:
             return {
-                "success": False,
-                "error": "missing_user",
-                "message": "User identifier is required"
+                'success': False,
+                'error': f'Course not found: {course_id}',
+                'course_id': course_id
             }
-
-        # Normalize course_id (replace spaces with '+')
-        normalized_course_id = course_id.replace(' ', '+')
-
-        # Parse course key
+        
+        # Validate student
         try:
-            course_key = CourseKey.from_string(normalized_course_id)
+            student = StudentUser.objects.get(username=student_username)
+        except StudentUser.DoesNotExist:
+            return {
+                'success': False,
+                'error': f'Student not found: {student_username}',
+                'course_id': course_id
+            }
+        
+        # Validate unit
+        try:
+            unit_key = UsageKey.from_string(unit_id)
+            unit = store.get_item(unit_key)
         except Exception as e:
             return {
-                "success": False,
-                "error": "invalid_course_id",
-                "message": f"Invalid course_id format: {str(e)}"
+                'success': False,
+                'error': f'Unit not found: {unit_id}. Error: {str(e)}',
+                'course_id': course_id
             }
-
-        # Import required modules
+        
+        # Get current grade to use as defaults
         try:
-            from openedx.core.djangoapps.content_groups.models import ContentGroup
-            from openedx.core.djangoapps.course_groups.cohorts import get_cohort_by_id
-            from openedx.core.djangoapps.course_groups.models import CourseCohort
-        except ImportError:
-            return {
-                "success": False,
-                "error": "modules_not_available",
-                "message": "Required modules not available"
-            }
-
-        # Verify content group exists
-        try:
-            content_group = ContentGroup.objects.get(id=content_group_id, course_id=course_key)
-        except ContentGroup.DoesNotExist:
-            return {
-                "success": False,
-                "error": "content_group_not_found",
-                "message": f"Content group with ID {content_group_id} not found in course {course_id}"
-            }
-
-        # Verify cohort exists
-        try:
-            cohort = get_cohort_by_id(course_key, cohort_id)
-        except Exception as e:
-            return {
-                "success": False,
-                "error": "cohort_not_found",
-                "message": f"Cohort with ID {cohort_id} not found in course {course_id}: {str(e)}"
-            }
-
-        # Get or create the CourseCohort relationship
-        try:
-            course_cohort, created = CourseCohort.objects.get_or_create(
-                course_user_group=cohort,
-                defaults={'assignment_type': 'manual'}
+            current_student_module = StudentModule.objects.get(
+                student=student,
+                course_id=course_key,
+                module_state_key=unit_key
             )
-            
-            # Assign the content group to the cohort
-            course_cohort.content_group = content_group
-            course_cohort.save()
-
-        except Exception as e:
-            return {
-                "success": False,
-                "error": "assignment_failed",
-                "message": f"Failed to assign content group to cohort: {str(e)}"
-            }
-
-        logger.info(
-            f"Successfully assigned content group '{content_group.name}' (ID: {content_group_id}) "
-            f"to cohort '{cohort.name}' (ID: {cohort_id}) in course {course_id} "
-            f"by user {acting_user.username}"
-        )
-
-        return {
-            "success": True,
-            "message": f"Content group '{content_group.name}' assigned to cohort '{cohort.name}' successfully",
-            "assignment": {
-                "content_group": {
-                    "id": content_group.id,
-                    "name": content_group.name
-                },
-                "cohort": {
-                    "id": cohort.id,
-                    "name": cohort.name
-                },
-                "course_id": str(course_key),
-                "assigned_by": acting_user.username
-            }
-        }
-
-    except Exception as e:
-        logger.exception(f"Failed to assign content group to cohort: {str(e)}")
-        return {
-            "success": False,
-            "error": "assignment_failed",
-            "message": f"Failed to assign content group to cohort: {str(e)}"
-        }
-
-
-def unassign_content_group_from_cohort_logic(course_id: str, content_group_id: int, cohort_id: int, user_identifier=None) -> dict:
-    """
-    Remove assignment of a content group from a cohort.
-
-    Args:
-        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
-        content_group_id (int): ID of the content group
-        cohort_id (int): ID of the cohort to unassign from
-        user_identifier: User performing the action
-
-    Returns:
-        dict: Success/error response with unassignment details
-    """
-    from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import CourseKey
-
-    logger = logging.getLogger(__name__)
-
-    try:
-        # Validate inputs
-        if not course_id:
-            return {
-                "success": False,
-                "error": "missing_course_id",
-                "message": "course_id is required"
-            }
-
-        if not content_group_id:
-            return {
-                "success": False,
-                "error": "missing_content_group_id",
-                "message": "content_group_id is required"
-            }
-
-        if not cohort_id:
-            return {
-                "success": False,
-                "error": "missing_cohort_id",
-                "message": "cohort_id is required"
-            }
-
-        # Get acting user
-        User = get_user_model()
-        if user_identifier:
-            acting_user = User.objects.get(id=user_identifier)
-        else:
-            return {
-                "success": False,
-                "error": "missing_user",
-                "message": "User identifier is required"
-            }
-
-        # Normalize course_id (replace spaces with '+')
-        normalized_course_id = course_id.replace(' ', '+')
-
-        # Parse course key
-        try:
-            course_key = CourseKey.from_string(normalized_course_id)
-        except Exception as e:
-            return {
-                "success": False,
-                "error": "invalid_course_id",
-                "message": f"Invalid course_id format: {str(e)}"
-            }
-
-        # Import required modules
-        try:
-            from openedx.core.djangoapps.content_groups.models import ContentGroup
-            from openedx.core.djangoapps.course_groups.cohorts import get_cohort_by_id
-            from openedx.core.djangoapps.course_groups.models import CourseCohort
-        except ImportError:
-            return {
-                "success": False,
-                "error": "modules_not_available",
-                "message": "Required modules not available"
-            }
-
-        # Verify content group exists
-        try:
-            content_group = ContentGroup.objects.get(id=content_group_id, course_id=course_key)
-        except ContentGroup.DoesNotExist:
-            return {
-                "success": False,
-                "error": "content_group_not_found",
-                "message": f"Content group with ID {content_group_id} not found in course {course_id}"
-            }
-
-        # Verify cohort exists
-        try:
-            cohort = get_cohort_by_id(course_key, cohort_id)
-        except Exception as e:
-            return {
-                "success": False,
-                "error": "cohort_not_found",
-                "message": f"Cohort with ID {cohort_id} not found in course {course_id}: {str(e)}"
-            }
-
-        # Find and update the CourseCohort relationship
-        try:
-            course_cohort = CourseCohort.objects.get(course_user_group=cohort)
-            
-            # Check if the content group is actually assigned
-            if course_cohort.content_group != content_group:
+            if current_student_module.grade is None:
                 return {
-                    "success": False,
-                    "error": "not_assigned",
-                    "message": f"Content group '{content_group.name}' is not assigned to cohort '{cohort.name}'"
+                    'success': False,
+                    'error': f'No existing grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
                 }
-            
-            # Remove the content group assignment
-            course_cohort.content_group = None
-            course_cohort.save()
-
-        except CourseCohort.DoesNotExist:
+        except StudentModule.DoesNotExist:
             return {
-                "success": False,
-                "error": "cohort_relationship_not_found",
-                "message": f"No content group assignment found for cohort '{cohort.name}'"
+                'success': False,
+                'error': f'No existing grade found for student {student_username} in unit {unit_id}',
+                'course_id': course_id
             }
-
-        logger.info(
-            f"Successfully unassigned content group '{content_group.name}' (ID: {content_group_id}) "
-            f"from cohort '{cohort.name}' (ID: {cohort_id}) in course {course_id} "
-            f"by user {acting_user.username}"
-        )
-
-        return {
-            "success": True,
-            "message": f"Content group '{content_group.name}' unassigned from cohort '{cohort.name}' successfully",
-            "unassignment": {
-                "content_group": {
-                    "id": content_group.id,
-                    "name": content_group.name
-                },
-                "cohort": {
-                    "id": cohort.id,
-                    "name": cohort.name
-                },
-                "course_id": str(course_key),
-                "unassigned_by": acting_user.username
-            }
-        }
-
-    except Exception as e:
-        logger.exception(f"Failed to unassign content group from cohort: {str(e)}")
-        return {
-            "success": False,
-            "error": "unassignment_failed",
-            "message": f"Failed to unassign content group from cohort: {str(e)}"
-        }
-
-
-def list_content_group_cohort_assignments_logic(course_id: str, user_identifier=None) -> dict:
-    """
-    List all content group to cohort assignments for a course.
-
-    Args:
-        course_id (str): Course identifier (e.g., course-v1:ORG+NUM+RUN)
-        user_identifier: User requesting the information
-
-    Returns:
-        dict: Success/error response with list of assignments
-    """
-    from django.contrib.auth import get_user_model
-    from opaque_keys.edx.keys import CourseKey
-
-    logger = logging.getLogger(__name__)
-
-    try:
-        # Validate inputs
-        if not course_id:
+        
+        # Use provided values or keep current ones
+        new_grade_value = grade_value if grade_value is not None else current_student_module.grade
+        new_max_grade = max_grade if max_grade is not None else current_student_module.max_grade
+        new_comment = comment if comment is not None else ''
+        
+        # Validate grade values
+        if new_grade_value < 0 or new_max_grade <= 0:
             return {
-                "success": False,
-                "error": "missing_course_id",
-                "message": "course_id is required"
+                'success': False,
+                'error': 'Invalid grade values. Grade must be >= 0 and max_grade must be > 0',
+                'course_id': course_id
             }
-
-        # Get acting user
-        User = get_user_model()
-        if user_identifier:
-            acting_user = User.objects.get(id=user_identifier)
-        else:
+        
+        if new_grade_value > new_max_grade:
             return {
-                "success": False,
-                "error": "missing_user",
-                "message": "User identifier is required"
+                'success': False,
+                'error': 'Grade value cannot exceed maximum grade',
+                'course_id': course_id
             }
-
-        # Normalize course_id (replace spaces with '+')
-        normalized_course_id = course_id.replace(' ', '+')
-
-        # Parse course key
+        
+        # Update the score using StudentModule
+        import json
+        
+        # Prepare state with comment
+        state_data = {'comment': new_comment}
+        state_json = json.dumps(state_data)
+        
         try:
-            course_key = CourseKey.from_string(normalized_course_id)
+            student_module = StudentModule.objects.get(
+                student=student,
+                course_id=course_key,
+                module_state_key=unit_key
+            )
+            student_module.grade = new_grade_value
+            student_module.max_grade = new_max_grade
+            student_module.state = state_json
+            student_module.save()
+        except StudentModule.DoesNotExist:
+            # Create new if doesn't exist
+            student_module = StudentModule.objects.create(
+                student=student,
+                course_id=course_key,
+                module_state_key=unit_key,
+                state=state_json,
+                grade=new_grade_value,
+                max_grade=new_max_grade,
+                done='na'
+            )
+        
+        # Calculate percentage
+        percentage = (new_grade_value / new_max_grade) * 100 if new_max_grade > 0 else 0
+        
+        # Create response data
+        grade_data = {
+            'id': f"{course_id}_{student_username}_{unit_id}",
+            'course_id': course_id,
+            'student_username': student_username,
+            'student_email': student.email,
+            'unit_id': unit_id,
+            'unit_name': getattr(unit, 'display_name', 'Unknown Unit'),
+            'grade_value': float(new_grade_value),
+            'max_grade': float(new_max_grade),
+            'percentage': round(percentage, 2),
+            'comment': new_comment,
+            'created_at': current_student_module.created.isoformat(),
+            'updated_at': timezone.now().isoformat(),
+            'graded_by': acting_user.username
+        }
+        
+        logger.info(f"Grade updated successfully for {student_username} in {unit_id}: {new_grade_value}/{new_max_grade}")
+        
+        return {
+            'success': True,
+            'message': 'Grade updated successfully',
+            'grade': grade_data,
+            'course_id': course_id
+        }
+        
+    except Exception as e:
+        logger.error(f"Error updating grade: {e}")
+        return {
+            'success': False,
+            'error': f'Error updating grade: {str(e)}',
+            'course_id': course_id
+        }
+
+
+def delete_grade_logic(
+    grade_id: str = None,
+    course_id: str = None,
+    student_username: str = None,
+    unit_id: str = None,
+    user_identifier=None
+) -> dict:
+    """
+    Delete a grade for a student in a unit.
+    
+    Args:
+        grade_id (str, optional): Composite grade ID in format 'course_id+student_username+unit_id'
+        course_id (str, optional): Course identifier
+        student_username (str, optional): Username of the student
+        unit_id (str, optional): Unit identifier
+        user_identifier: User performing the deletion
+        
+    Returns:
+        dict: Result with success status
+    """
+    try:
+        from django.contrib.auth import get_user_model
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from lms.djangoapps.grades.models import PersistentSubsectionGrade
+        from lms.djangoapps.courseware.models import StudentModule
+        from xmodule.modulestore.django import modulestore
+        from common.djangoapps.student.models import User as StudentUser
+        
+        User = get_user_model()
+        
+        # Parse grade_id if provided
+        if grade_id:
+            logger.info(f"delete_grade_logic: Parsing grade_id: {grade_id}")
+            
+            # Expected format: course_id+student_username+unit_id
+            # Example: course-v1:aulasneo+2025+2025_gabriel1407_block-v1:aulasneo+2025+2025+type@sequential+block@a120efd743f9471f8dea03a0f44a6457
+            
+            # Strategy: Look for patterns to identify boundaries
+            # 1. Course ID starts with "course-v1:" and ends before "_username_"
+            # 2. Unit ID starts with "block-v1:" 
+            
+            # Find the pattern "_username_block-v1:" to split
+            import re
+            
+            # Look for pattern: course-v1:...+...+...+username+block-v1:...
+            # The username appears after course ID and before block ID
+            # Analyzing: course-v1:aulasneo+2025+2025_gabriel1407_block-v1:...
+            match = re.match(r'^(course-v1:[^+]+\+[^+]+\+[^_]+)_([^_]+)_(block-v1:.+)$', grade_id)
+            
+            logger.info(f"delete_grade_logic: Regex match result: {match}")
+            
+            if match:
+                course_id = match.group(1)
+                student_username = match.group(2)
+                unit_id = match.group(3)
+            else:
+                logger.info(f"delete_grade_logic: Regex failed, trying fallback parsing")
+                # Fallback: try to parse manually
+                if '_block-v1:' in grade_id:
+                    logger.info(f"delete_grade_logic: Found _block-v1: in grade_id")
+                    # Split on _block-v1:
+                    before_unit, after_unit = grade_id.split('_block-v1:', 1)
+                    unit_id = 'block-v1:' + after_unit
+                    
+                    logger.info(f"delete_grade_logic: before_unit: {before_unit}, unit_id: {unit_id}")
+                    
+                    # Now split the before_unit part to get course and student
+                    # Look for the last underscore before block-v1
+                    parts = before_unit.split('_')
+                    logger.info(f"delete_grade_logic: parts after split: {parts}")
+                    
+                    if len(parts) >= 2:
+                        student_username = parts[-1]
+                        course_id = '_'.join(parts[:-1])
+                        logger.info(f"delete_grade_logic: Fallback parsed - course_id: {course_id}, student_username: {student_username}")
+                    else:
+                        return {
+                            'success': False,
+                            'error': f'Could not parse grade_id format: {grade_id}'
+                        }
+                else:
+                    return {
+                        'success': False,
+                        'error': f'Invalid grade_id format. Expected course_id_student_username_unit_id, got: {grade_id}'
+                    }
+        
+        # Validate that we have all required parameters
+        if not all([course_id, student_username, unit_id]):
+            return {
+                'success': False,
+                'error': 'course_id, student_username, and unit_id are required (either individually or via grade_id)'
+            }
+        
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(f"delete_grade_logic: User {acting_user.username} deleting grade for {student_username}")
+        logger.info(f"delete_grade_logic: Parsed - course_id: {course_id}, student_username: {student_username}, unit_id: {unit_id}")
+        
+        # Validate course
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+        
+        if not course:
+            return {
+                'success': False,
+                'error': f'Course not found: {course_id}',
+                'course_id': course_id
+            }
+        
+        # Validate student
+        try:
+            student = StudentUser.objects.get(username=student_username)
+        except StudentUser.DoesNotExist:
+            return {
+                'success': False,
+                'error': f'Student not found: {student_username}',
+                'course_id': course_id
+            }
+        
+        # Validate unit
+        try:
+            unit_key = UsageKey.from_string(unit_id)
+            unit = store.get_item(unit_key)
         except Exception as e:
             return {
-                "success": False,
-                "error": "invalid_course_id",
-                "message": f"Invalid course_id format: {str(e)}"
+                'success': False,
+                'error': f'Unit not found: {unit_id}. Error: {str(e)}',
+                'course_id': course_id
             }
-
-        # Import required modules
+        
+        # Check if grade exists - handle different unit types
+        unit_type = unit_key.block_type
+        logger.info(f"delete_grade_logic: Unit type is: {unit_type}")
+        
+        if unit_type == 'sequential':
+            # For sequential (subsection), check PersistentSubsectionGrade
+            try:
+                from lms.djangoapps.grades.models import PersistentSubsectionGrade
+                subsection_grade = PersistentSubsectionGrade.objects.get(
+                    user_id=student.id,
+                    course_id=course_key,
+                    usage_key=unit_key
+                )
+                logger.info(f"delete_grade_logic: Found subsection grade: {subsection_grade}")
+            except PersistentSubsectionGrade.DoesNotExist:
+                return {
+                    'success': False,
+                    'error': f'No subsection grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
+                }
+        else:
+            # For other types (problem, etc.), check StudentModule
+            try:
+                student_module = StudentModule.objects.get(
+                    student=student,
+                    course_id=course_key,
+                    module_state_key=unit_key
+                )
+                if student_module.grade is None:
+                    return {
+                        'success': False,
+                        'error': f'No grade found for student {student_username} in unit {unit_id}',
+                        'course_id': course_id
+                    }
+            except StudentModule.DoesNotExist:
+                return {
+                    'success': False,
+                    'error': f'No grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
+                }
+        
+        # Delete the score based on unit type
         try:
-            from openedx.core.djangoapps.content_groups.models import ContentGroup
-            from openedx.core.djangoapps.course_groups.models import CourseCohort
-        except ImportError:
+            if unit_type == 'sequential':
+                # Delete subsection grade
+                deleted_count = PersistentSubsectionGrade.objects.filter(
+                    user_id=student.id,
+                    course_id=course_key,
+                    usage_key=unit_key
+                ).delete()
+                logger.info(f"delete_grade_logic: Deleted {deleted_count[0]} subsection grade records")
+                
+                # Also delete course-level grade cache to force recalculation
+                from lms.djangoapps.grades.models import PersistentCourseGrade
+                course_deleted = PersistentCourseGrade.objects.filter(
+                    user_id=student.id,
+                    course_id=course_key
+                ).delete()
+                logger.info(f"delete_grade_logic: Deleted {course_deleted[0]} course grade records")
+                
+            else:
+                # Delete StudentModule record for problems
+                deleted_count = StudentModule.objects.filter(
+                    student=student,
+                    course_id=course_key,
+                    module_state_key=unit_key
+                ).delete()
+                logger.info(f"delete_grade_logic: Deleted {deleted_count[0]} student module records")
+                
+                # Also clean up related subsection and course grades
+                PersistentSubsectionGrade.objects.filter(
+                    user_id=student.id,
+                    course_id=course_key
+                ).delete()
+                
+                from lms.djangoapps.grades.models import PersistentCourseGrade
+                PersistentCourseGrade.objects.filter(
+                    user_id=student.id,
+                    course_id=course_key
+                ).delete()
+                
+        except Exception as delete_error:
+            logger.error(f"Error deleting grade records: {delete_error}")
             return {
-                "success": False,
-                "error": "modules_not_available",
-                "message": "Required modules not available"
+                'success': False,
+                'error': f'Error deleting grade: {str(delete_error)}',
+                'course_id': course_id
             }
-
-        # Get all content groups for the course
-        content_groups = ContentGroup.objects.filter(course_id=course_key)
         
-        # Get all cohort assignments with content groups
-        cohort_assignments = CourseCohort.objects.filter(
-            course_user_group__course_id=course_key,
-            content_group__isnull=False
-        ).select_related('content_group', 'course_user_group')
-
-        assignments_data = []
-        for assignment in cohort_assignments:
-            assignments_data.append({
-                "content_group": {
-                    "id": assignment.content_group.id,
-                    "name": assignment.content_group.name,
-                    "description": assignment.content_group.description or ""
-                },
-                "cohort": {
-                    "id": assignment.course_user_group.id,
-                    "name": assignment.course_user_group.name
-                },
-                "assignment_type": assignment.assignment_type,
-                "course_id": str(course_key)
-            })
-
-        # Also include unassigned content groups
-        assigned_group_ids = [assignment.content_group.id for assignment in cohort_assignments]
-        unassigned_groups = content_groups.exclude(id__in=assigned_group_ids)
+        logger.info(f"Grade deleted successfully for {student_username} in {unit_id}")
         
-        unassigned_data = []
-        for group in unassigned_groups:
-            unassigned_data.append({
-                "id": group.id,
-                "name": group.name,
-                "description": group.description or ""
-            })
-
-        logger.info(
-            f"Listed {len(assignments_data)} content group assignments and "
-            f"{len(unassigned_data)} unassigned groups for course {course_id} "
-            f"by user {acting_user.username}"
-        )
-
         return {
-            "success": True,
-            "course_id": course_id,
-            "assignments": assignments_data,
-            "unassigned_content_groups": unassigned_data,
-            "total_assignments": len(assignments_data),
-            "total_unassigned": len(unassigned_data)
+            'success': True,
+            'message': 'Grade deleted successfully',
+            'course_id': course_id,
+            'student_username': student_username,
+            'unit_id': unit_id
+        }
+        
+    except Exception as e:
+        logger.error(f"Error deleting grade: {e}")
+        return {
+            'success': False,
+            'error': f'Error deleting grade: {str(e)}',
+            'course_id': course_id
         }
 
-    except Exception as e:
-        logger.exception(f"Failed to list content group assignments: {str(e)}")
+
+def list_grades_logic(
+    course_id: str = None,
+    student_username: str = None,
+    unit_id: str = None,
+    min_grade: float = None,
+    max_grade_filter: float = None,
+    page: int = 1,
+    page_size: int = 20,
+    user_identifier=None
+) -> dict:
+    """
+    List grades with optional filtering and pagination.
+    
+    Args:
+        course_id (str, optional): Filter by course ID
+        student_username (str, optional): Filter by student username
+        unit_id (str, optional): Filter by unit ID
+        min_grade (float, optional): Filter by minimum grade value
+        max_grade_filter (float, optional): Filter by maximum grade value
+        page (int): Page number for pagination
+        page_size (int): Number of items per page
+        user_identifier: User requesting the grade list
+        
+    Returns:
+        dict: Result with success status and paginated grade list
+    """
+    try:
+        from django.contrib.auth import get_user_model
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from lms.djangoapps.grades.models import PersistentSubsectionGrade
+        from xmodule.modulestore.django import modulestore
+        from common.djangoapps.student.models import User as StudentUser
+        from django.core.paginator import Paginator
+        
+        User = get_user_model()
+        
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(f"list_grades_logic: User {acting_user.username} listing grades")
+        
+        # Get grades from both sources
+        all_grades = []
+        
+        # 1. Get subsection grades from PersistentSubsectionGrade
+        subsection_query = PersistentSubsectionGrade.objects.all()
+        
+        # 2. Get individual unit grades from StudentModule
+        from lms.djangoapps.courseware.models import StudentModule
+        student_module_query = StudentModule.objects.filter(grade__isnull=False)
+        
+        # Apply filters to both queries
+        if course_id:
+            course_key = CourseKey.from_string(course_id)
+            subsection_query = subsection_query.filter(course_id=course_key)
+            student_module_query = student_module_query.filter(course_id=course_key)
+        
+        if student_username:
+            try:
+                student = StudentUser.objects.get(username=student_username)
+                subsection_query = subsection_query.filter(user_id=student.id)
+                student_module_query = student_module_query.filter(student=student)
+            except StudentUser.DoesNotExist:
+                return {
+                    'success': False,
+                    'error': f'Student not found: {student_username}'
+                }
+        
+        if unit_id:
+            try:
+                unit_key = UsageKey.from_string(unit_id)
+                subsection_query = subsection_query.filter(usage_key=unit_key)
+                student_module_query = student_module_query.filter(module_state_key=unit_key)
+            except Exception as e:
+                return {
+                    'success': False,
+                    'error': f'Invalid unit ID: {unit_id}. Error: {str(e)}'
+                }
+        
+        # Apply grade value filters
+        if min_grade is not None:
+            subsection_query = subsection_query.filter(earned_graded__gte=min_grade)
+            student_module_query = student_module_query.filter(grade__gte=min_grade)
+        
+        if max_grade_filter is not None:
+            subsection_query = subsection_query.filter(earned_graded__lte=max_grade_filter)
+            student_module_query = student_module_query.filter(grade__lte=max_grade_filter)
+        
+        # Combine both queries into a single list with metadata
+        for grade in subsection_query.order_by('-modified'):
+            all_grades.append({
+                'type': 'subsection',
+                'grade': grade,
+                'modified': grade.modified
+            })
+            
+        for module in student_module_query.order_by('-modified'):
+            all_grades.append({
+                'type': 'module',
+                'grade': module,
+                'modified': module.modified
+            })
+        
+        # Sort combined results by modification date
+        all_grades.sort(key=lambda x: x['modified'], reverse=True)
+        
+        # Apply pagination to combined results
+        paginator = Paginator(all_grades, page_size)
+        page_obj = paginator.get_page(page)
+        
+        # Build response data
+        grades_list = []
+        store = modulestore()
+        
+        for grade_item in page_obj:
+            try:
+                grade_type = grade_item['type']
+                grade = grade_item['grade']
+                
+                if grade_type == 'subsection':
+                    # Handle PersistentSubsectionGrade
+                    student = StudentUser.objects.get(id=grade.user_id)
+                    unit = store.get_item(grade.usage_key)
+                    unit_name = getattr(unit, 'display_name', 'Unknown Unit')
+                    percentage = (grade.earned_graded / grade.possible_graded) * 100 if grade.possible_graded > 0 else 0
+                    
+                    grade_data = {
+                        'id': f"{grade.course_id}_{student.username}_{grade.usage_key}",
+                        'course_id': str(grade.course_id),
+                        'student_username': student.username,
+                        'student_email': student.email,
+                        'unit_id': str(grade.usage_key),
+                        'unit_name': unit_name,
+                        'grade_value': float(grade.earned_graded),
+                        'max_grade': float(grade.possible_graded),
+                        'percentage': round(percentage, 2),
+                        'comment': '',  # PersistentSubsectionGrade doesn't store comments
+                        'created_at': grade.created.isoformat(),
+                        'updated_at': grade.modified.isoformat(),
+                        'graded_by': 'System'
+                    }
+                    
+                elif grade_type == 'module':
+                    # Handle StudentModule
+                    student = grade.student
+                    unit = store.get_item(grade.module_state_key)
+                    unit_name = getattr(unit, 'display_name', 'Unknown Unit')
+                    percentage = (grade.grade / grade.max_grade) * 100 if grade.max_grade > 0 else 0
+                    
+                    # Extract comment from state field
+                    comment = ''
+                    try:
+                        import json
+                        if grade.state:
+                            state_data = json.loads(grade.state)
+                            comment = state_data.get('comment', '')
+                    except (json.JSONDecodeError, AttributeError):
+                        comment = ''
+                    
+                    grade_data = {
+                        'id': f"{grade.course_id}_{student.username}_{grade.module_state_key}",
+                        'course_id': str(grade.course_id),
+                        'student_username': student.username,
+                        'student_email': student.email,
+                        'unit_id': str(grade.module_state_key),
+                        'unit_name': unit_name,
+                        'grade_value': float(grade.grade),
+                        'max_grade': float(grade.max_grade),
+                        'percentage': round(percentage, 2),
+                        'comment': comment,
+                        'created_at': grade.created.isoformat(),
+                        'updated_at': grade.modified.isoformat(),
+                        'graded_by': 'System'
+                    }
+                
+                grades_list.append(grade_data)
+                
+            except Exception as e:
+                logger.warning(f"Error processing grade {grade_item}: {e}")
+                continue
+        
+        logger.info(f"Listed {len(grades_list)} grades")
+        
         return {
-            "success": False,
-            "error": "assignments_list_failed",
-            "message": f"Failed to list content group assignments: {str(e)}"
+            'success': True,
+            'grades': grades_list
+        }
+        
+    except Exception as e:
+        logger.error(f"Error listing grades: {e}")
+        return {
+            'success': False,
+            'error': f'Error listing grades: {str(e)}'
         }
