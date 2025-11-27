@@ -5,12 +5,13 @@ This module contains all the Swagger documentation schemas separated from
 the view logic to maintain clean code principles.
 """
 from drf_yasg import openapi
-from .serializers import GradeCreateSerializer, GradeUpdateSerializer, GradeResponseSerializer
+
+from .serializers import GradeCreateSerializer, GradeResponseSerializer, GradeUpdateSerializer
 
 
 class GradeSwaggerSchemas:
     """Swagger schemas for Grade endpoints."""
-    
+
     # Common parameters
     COURSE_ID_PARAM = openapi.Parameter(
         'course_id',
@@ -19,7 +20,7 @@ class GradeSwaggerSchemas:
         type=openapi.TYPE_STRING,
         required=True
     )
-    
+
     STUDENT_USERNAME_PARAM = openapi.Parameter(
         'student_username',
         openapi.IN_QUERY,
@@ -27,7 +28,7 @@ class GradeSwaggerSchemas:
         type=openapi.TYPE_STRING,
         required=True
     )
-    
+
     UNIT_ID_PARAM = openapi.Parameter(
         'unit_id',
         openapi.IN_QUERY,
@@ -35,7 +36,7 @@ class GradeSwaggerSchemas:
         type=openapi.TYPE_STRING,
         required=True
     )
-    
+
     # Filter parameters
     COURSE_ID_FILTER_PARAM = openapi.Parameter(
         'course_id',
@@ -44,7 +45,7 @@ class GradeSwaggerSchemas:
         type=openapi.TYPE_STRING,
         required=False
     )
-    
+
     STUDENT_USERNAME_FILTER_PARAM = openapi.Parameter(
         'student_username',
         openapi.IN_QUERY,
@@ -52,7 +53,7 @@ class GradeSwaggerSchemas:
         type=openapi.TYPE_STRING,
         required=False
     )
-    
+
     UNIT_ID_FILTER_PARAM = openapi.Parameter(
         'unit_id',
         openapi.IN_QUERY,
@@ -60,7 +61,7 @@ class GradeSwaggerSchemas:
         type=openapi.TYPE_STRING,
         required=False
     )
-    
+
     MIN_GRADE_PARAM = openapi.Parameter(
         'min_grade',
         openapi.IN_QUERY,
@@ -68,7 +69,7 @@ class GradeSwaggerSchemas:
         type=openapi.TYPE_NUMBER,
         required=False
     )
-    
+
     MAX_GRADE_FILTER_PARAM = openapi.Parameter(
         'max_grade_filter',
         openapi.IN_QUERY,
@@ -76,7 +77,7 @@ class GradeSwaggerSchemas:
         type=openapi.TYPE_NUMBER,
         required=False
     )
-    
+
     PAGE_PARAM = openapi.Parameter(
         'page',
         openapi.IN_QUERY,
@@ -85,7 +86,7 @@ class GradeSwaggerSchemas:
         required=False,
         default=1
     )
-    
+
     PAGE_SIZE_PARAM = openapi.Parameter(
         'page_size',
         openapi.IN_QUERY,
@@ -94,7 +95,7 @@ class GradeSwaggerSchemas:
         required=False,
         default=20
     )
-    
+
     # Response schemas
     SUCCESS_RESPONSE_SCHEMA = openapi.Schema(
         type=openapi.TYPE_OBJECT,
@@ -104,7 +105,7 @@ class GradeSwaggerSchemas:
             'data': openapi.Schema(type=openapi.TYPE_OBJECT)
         }
     )
-    
+
     ERROR_RESPONSE_SCHEMA = openapi.Schema(
         type=openapi.TYPE_OBJECT,
         properties={
@@ -120,7 +121,7 @@ class GradeSwaggerSchemas:
             )
         }
     )
-    
+
     LIST_RESPONSE_SCHEMA = openapi.Schema(
         type=openapi.TYPE_OBJECT,
         properties={
@@ -157,7 +158,7 @@ class GradeSwaggerSchemas:
             )
         }
     )
-    
+
     # Common responses
     COMMON_RESPONSES = {
         400: openapi.Response(
@@ -181,7 +182,7 @@ class GradeSwaggerSchemas:
             schema=ERROR_RESPONSE_SCHEMA
         )
     }
-    
+
     @classmethod
     def get_create_schema(cls):
         """Get schema for create grade endpoint."""
@@ -197,7 +198,7 @@ class GradeSwaggerSchemas:
             },
             'tags': ['Grades']
         }
-    
+
     @classmethod
     def get_retrieve_schema(cls):
         """Get schema for retrieve grade endpoint."""
@@ -217,7 +218,7 @@ class GradeSwaggerSchemas:
             },
             'tags': ['Grades']
         }
-    
+
     @classmethod
     def get_update_schema(cls):
         """Get schema for update grade endpoint."""
@@ -238,7 +239,7 @@ class GradeSwaggerSchemas:
             },
             'tags': ['Grades']
         }
-    
+
     @classmethod
     def get_partial_update_schema(cls):
         """Get schema for partial update grade endpoint."""
@@ -259,7 +260,7 @@ class GradeSwaggerSchemas:
             },
             'tags': ['Grades']
         }
-    
+
     @classmethod
     def get_delete_schema(cls):
         """Get schema for delete grade endpoint."""
@@ -274,7 +275,7 @@ class GradeSwaggerSchemas:
             },
             'tags': ['Grades']
         }
-    
+
     @classmethod
     def get_list_schema(cls):
         """Get schema for list grades endpoint."""

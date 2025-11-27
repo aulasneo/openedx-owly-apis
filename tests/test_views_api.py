@@ -1665,6 +1665,7 @@ class TestBulkEmailAPI:
         assert resp.status_code == 200  # ViewSet passes through, logic handles validation
         assert resp.data["called"] == "send_bulk_email_logic"
 
+
 class TestGradeViewSet:
     """Tests for the Grades v2 API ViewSet"""
 

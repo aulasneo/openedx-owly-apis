@@ -5,19 +5,20 @@ This module provides consistent error handling and response formatting
 for the v2 API endpoints.
 """
 import logging
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from opaque_keys import InvalidKeyError
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
-from django.core.exceptions import ValidationError as DjangoValidationError
-from opaque_keys import InvalidKeyError
 
 logger = logging.getLogger(__name__)
 
 
 class GradeAPIException(Exception):
     """Base exception for Grade API operations."""
-    
+
     def __init__(self, message: str, error_code: str = None, status_code: int = 400):
         self.message = message
         self.error_code = error_code or 'GRADE_API_ERROR'
@@ -27,7 +28,7 @@ class GradeAPIException(Exception):
 
 class GradeNotFoundError(GradeAPIException):
     """Exception raised when a grade is not found."""
-    
+
     def __init__(self, course_id: str, student_username: str, unit_id: str):
         message = f"Grade not found for student '{student_username}' in unit '{unit_id}' of course '{course_id}'"
         super().__init__(message, 'GRADE_NOT_FOUND', 404)
@@ -35,7 +36,7 @@ class GradeNotFoundError(GradeAPIException):
 
 class StudentNotFoundError(GradeAPIException):
     """Exception raised when a student is not found."""
-    
+
     def __init__(self, username: str):
         message = f"Student not found: {username}"
         super().__init__(message, 'STUDENT_NOT_FOUND', 404)
@@ -43,7 +44,7 @@ class StudentNotFoundError(GradeAPIException):
 
 class CourseNotFoundError(GradeAPIException):
     """Exception raised when a course is not found."""
-    
+
     def __init__(self, course_id: str):
         message = f"Course not found: {course_id}"
         super().__init__(message, 'COURSE_NOT_FOUND', 404)
@@ -51,7 +52,7 @@ class CourseNotFoundError(GradeAPIException):
 
 class UnitNotFoundError(GradeAPIException):
     """Exception raised when a unit is not found."""
-    
+
     def __init__(self, unit_id: str):
         message = f"Unit not found: {unit_id}"
         super().__init__(message, 'UNIT_NOT_FOUND', 404)
@@ -59,7 +60,7 @@ class UnitNotFoundError(GradeAPIException):
 
 class InvalidGradeValueError(GradeAPIException):
     """Exception raised when grade values are invalid."""
-    
+
     def __init__(self, grade_value: float, max_grade: float):
         message = f"Invalid grade values: {grade_value}/{max_grade}. Grade cannot exceed maximum grade."
         super().__init__(message, 'INVALID_GRADE_VALUE', 400)
@@ -67,7 +68,7 @@ class InvalidGradeValueError(GradeAPIException):
 
 class PermissionDeniedError(GradeAPIException):
     """Exception raised when user lacks permission."""
-    
+
     def __init__(self, action: str, resource: str = None):
         message = f"Permission denied for action '{action}'"
         if resource:
@@ -83,13 +84,13 @@ def format_error_response(
 ) -> Dict[str, Any]:
     """
     Format a consistent error response.
-    
+
     Args:
         error_message (str): Human-readable error message
         error_code (str, optional): Machine-readable error code
         details (Dict[str, Any], optional): Additional error details
         status_code (int): HTTP status code
-        
+
     Returns:
         Dict[str, Any]: Formatted error response
     """
@@ -101,20 +102,20 @@ def format_error_response(
             'status_code': status_code
         }
     }
-    
+
     if details:
         error_response['error']['details'] = details
-    
+
     return error_response
 
 
 def handle_openedx_errors(func):
     """
     Decorator to handle common OpenEdX-related errors.
-    
+
     Args:
         func: Function to wrap
-        
+
     Returns:
         Wrapped function with error handling
     """
@@ -142,24 +143,24 @@ def handle_openedx_errors(func):
                 'UNEXPECTED_ERROR',
                 500
             )
-    
+
     return wrapper
 
 
 def custom_exception_handler(exc, context):
     """
     Custom exception handler for v2 API.
-    
+
     Args:
         exc: Exception instance
         context: Context information
-        
+
     Returns:
         Response: Formatted error response
     """
     # Call REST framework's default exception handler first
     response = exception_handler(exc, context)
-    
+
     # Handle custom Grade API exceptions
     if isinstance(exc, GradeAPIException):
         error_response = format_error_response(
@@ -168,7 +169,7 @@ def custom_exception_handler(exc, context):
             status_code=exc.status_code
         )
         return Response(error_response, status=exc.status_code)
-    
+
     # Handle OpenEdX key errors
     if isinstance(exc, InvalidKeyError):
         error_response = format_error_response(
@@ -177,7 +178,7 @@ def custom_exception_handler(exc, context):
             status_code=400
         )
         return Response(error_response, status=status.HTTP_400_BAD_REQUEST)
-    
+
     # Handle Django validation errors
     if isinstance(exc, DjangoValidationError):
         error_response = format_error_response(
@@ -186,7 +187,7 @@ def custom_exception_handler(exc, context):
             status_code=400
         )
         return Response(error_response, status=status.HTTP_400_BAD_REQUEST)
-    
+
     # If response is None, this was not handled by the default handler
     if response is None:
         logger.error(f"Unhandled exception: {exc}")
@@ -196,7 +197,7 @@ def custom_exception_handler(exc, context):
             status_code=500
         )
         return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     # Customize the response format for handled exceptions
     if hasattr(response, 'data'):
         custom_data = format_error_response(
@@ -206,7 +207,7 @@ def custom_exception_handler(exc, context):
             status_code=response.status_code
         )
         response.data = custom_data
-    
+
     return response
 
 
@@ -218,7 +219,7 @@ def log_api_error(
 ) -> None:
     """
     Log API errors with context information.
-    
+
     Args:
         error (Exception): The error that occurred
         context (Dict[str, Any], optional): Additional context
@@ -231,29 +232,29 @@ def log_api_error(
         'user': user,
         'endpoint': endpoint
     }
-    
+
     if context:
         log_data['context'] = context
-    
+
     logger.error(f"API Error: {log_data}")
 
 
 class ErrorResponseBuilder:
     """Builder class for creating consistent error responses."""
-    
+
     @staticmethod
     def not_found(resource: str, identifier: str = None) -> Dict[str, Any]:
         """Build a not found error response."""
         message = f"{resource} not found"
         if identifier:
             message += f": {identifier}"
-        
+
         return format_error_response(
             error_message=message,
             error_code=f"{resource.upper()}_NOT_FOUND",
             status_code=404
         )
-    
+
     @staticmethod
     def validation_error(field: str, message: str) -> Dict[str, Any]:
         """Build a validation error response."""
@@ -263,20 +264,20 @@ class ErrorResponseBuilder:
             details={'field': field, 'message': message},
             status_code=400
         )
-    
+
     @staticmethod
     def permission_denied(action: str, resource: str = None) -> Dict[str, Any]:
         """Build a permission denied error response."""
         message = f"Permission denied for action '{action}'"
         if resource:
             message += f" on resource '{resource}'"
-        
+
         return format_error_response(
             error_message=message,
             error_code='PERMISSION_DENIED',
             status_code=403
         )
-    
+
     @staticmethod
     def invalid_input(message: str, details: Dict[str, Any] = None) -> Dict[str, Any]:
         """Build an invalid input error response."""
@@ -286,7 +287,7 @@ class ErrorResponseBuilder:
             details=details,
             status_code=400
         )
-    
+
     @staticmethod
     def internal_error(message: str = None) -> Dict[str, Any]:
         """Build an internal server error response."""

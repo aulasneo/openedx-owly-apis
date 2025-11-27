@@ -1,11 +1,13 @@
+from typing import Any, Dict
+
 from rest_framework import serializers
-from typing import Dict, Any
+
 from .validators import GradeValidationMixin, validate_grade_range
 
 
 class GradeCreateSerializer(serializers.Serializer, GradeValidationMixin):
     """Serializer for creating a new grade."""
-    
+
     course_id = serializers.CharField(
         max_length=255,
         help_text="Course identifier (e.g., course-v1:ORG+NUM+RUN)"
@@ -41,7 +43,7 @@ class GradeCreateSerializer(serializers.Serializer, GradeValidationMixin):
         """Validate that grade_value doesn't exceed max_grade."""
         # Use the validation mixin method
         validated_grades = self.validate_grade_values(
-            attrs['grade_value'], 
+            attrs['grade_value'],
             attrs['max_grade']
         )
         attrs.update(validated_grades)
@@ -50,7 +52,7 @@ class GradeCreateSerializer(serializers.Serializer, GradeValidationMixin):
 
 class GradeUpdateSerializer(serializers.Serializer, GradeValidationMixin):
     """Serializer for updating an existing grade."""
-    
+
     grade_value = serializers.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -76,21 +78,21 @@ class GradeUpdateSerializer(serializers.Serializer, GradeValidationMixin):
         """Validate that grade_value doesn't exceed max_grade if both are provided."""
         grade_value = attrs.get('grade_value')
         max_grade = attrs.get('max_grade')
-        
+
         if grade_value is not None and max_grade is not None:
             # Use the validation mixin method
             validated_grades = self.validate_grade_values(
-                float(grade_value), 
+                float(grade_value),
                 float(max_grade)
             )
             attrs.update(validated_grades)
-        
+
         return attrs
 
 
 class GradeResponseSerializer(serializers.Serializer):
     """Serializer for grade response data."""
-    
+
     id = serializers.CharField(read_only=True, help_text="Grade identifier")
     course_id = serializers.CharField(read_only=True, help_text="Course identifier")
     student_username = serializers.CharField(read_only=True, help_text="Student username")
@@ -123,7 +125,7 @@ class GradeResponseSerializer(serializers.Serializer):
 
 class GradeListQuerySerializer(serializers.Serializer):
     """Serializer for grade list query parameters."""
-    
+
     course_id = serializers.CharField(
         required=False,
         help_text="Filter by course ID"
@@ -161,4 +163,3 @@ class GradeListQuerySerializer(serializers.Serializer):
         default=20,
         help_text="Number of items per page"
     )
-

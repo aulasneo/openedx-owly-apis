@@ -1,4 +1,4 @@
-from django.urls import path, include, re_path
+from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 
 from .views import GradeViewSet
@@ -14,7 +14,7 @@ urlpatterns = [
         r'^grades/(?P<pk>[^/]+)/$',
         GradeViewSet.as_view({
             'get': 'retrieve',
-            'put': 'update', 
+            'put': 'update',
             'patch': 'partial_update',
             'delete': 'destroy'
         }),
