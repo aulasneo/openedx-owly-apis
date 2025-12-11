@@ -28,7 +28,7 @@ def _auth_user(**attrs):
 
 class TestOpenedXCourseViewSet:
     def test_create_course_calls_logic_and_returns_payload(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "create_course"})
         req = api_factory.post(
             "/owly-courses/create/",
@@ -51,7 +51,7 @@ class TestOpenedXCourseViewSet:
         assert body["kwargs"]["org"] == "ORG"
 
     def test_update_settings_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "update_settings"})
         req = api_factory.post(
             "/owly-courses/settings/update/",
@@ -65,7 +65,7 @@ class TestOpenedXCourseViewSet:
         assert resp.data["called"] == "update_course_settings_logic"
 
     def test_create_structure_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "create_structure"})
         req = api_factory.post(
             "/owly-courses/structure/",
@@ -79,7 +79,7 @@ class TestOpenedXCourseViewSet:
         assert resp.data["called"] == "create_course_structure_logic"
 
     def test_add_html_content_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_html_content"})
         req = api_factory.post(
             "/owly-courses/content/html/",
@@ -93,7 +93,7 @@ class TestOpenedXCourseViewSet:
         assert resp.data["called"] == "add_html_content_logic"
 
     def test_add_video_content_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_video_content"})
         req = api_factory.post(
             "/owly-courses/content/video/",
@@ -107,7 +107,7 @@ class TestOpenedXCourseViewSet:
         assert resp.data["called"] == "add_video_content_logic"
 
     def test_add_problem_content_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_problem_content"})
         req = api_factory.post(
             "/owly-courses/content/problem/",
@@ -121,7 +121,7 @@ class TestOpenedXCourseViewSet:
         assert resp.data["called"] == "add_problem_content_logic"
 
     def test_add_discussion_content_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_discussion_content"})
         req = api_factory.post(
             "/owly-courses/content/discussion/",
@@ -135,7 +135,7 @@ class TestOpenedXCourseViewSet:
         assert resp.data["called"] == "add_discussion_content_logic"
 
     def test_configure_certificates_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "configure_certificates"})
         req = api_factory.post(
             "/owly-courses/certificates/configure/",
@@ -150,7 +150,7 @@ class TestOpenedXCourseViewSet:
 
     def test_toggle_certificate_simple_calls_logic(self, api_factory):
         """Test activating/deactivating certificates with simple toggle"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "configure_certificates"})
         req = api_factory.post(
             "/owly-courses/certificates/configure/",
@@ -168,7 +168,7 @@ class TestOpenedXCourseViewSet:
         assert resp.data["kwargs"]["is_active"] is True
 
     def test_control_unit_availability_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "control_unit_availability"})
         req = api_factory.post(
             "/owly-courses/units/availability/control/",
@@ -182,7 +182,7 @@ class TestOpenedXCourseViewSet:
         assert resp.data["called"] == "control_unit_availability_logic"
 
     def test_update_advanced_settings_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "update_advanced_settings"})
         req = api_factory.post(
             "/owly-courses/settings/advanced/",
@@ -197,7 +197,7 @@ class TestOpenedXCourseViewSet:
 
     def test_manage_course_staff_add_staff_calls_logic(self, api_factory):
         """Test adding a user to course staff role"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
         req = api_factory.post(
             "/owly-courses/staff/manage/",
@@ -222,7 +222,7 @@ class TestOpenedXCourseViewSet:
 
     def test_manage_course_staff_remove_staff_calls_logic(self, api_factory):
         """Test removing a user from course staff role"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
         req = api_factory.post(
             "/owly-courses/staff/manage/",
@@ -244,7 +244,7 @@ class TestOpenedXCourseViewSet:
 
     def test_manage_course_staff_add_course_creator_calls_logic(self, api_factory):
         """Test adding a user to course creator role (OWLY-178 use case)"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
         req = api_factory.post(
             "/owly-courses/staff/manage/",
@@ -266,7 +266,7 @@ class TestOpenedXCourseViewSet:
 
     def test_manage_course_staff_remove_course_creator_calls_logic(self, api_factory):
         """Test removing a user from course creator role (OWLY-178 specific case)"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
         req = api_factory.post(
             "/owly-courses/staff/manage/",
@@ -288,7 +288,7 @@ class TestOpenedXCourseViewSet:
 
     def test_manage_course_staff_with_user_id_calls_logic(self, api_factory):
         """Test managing staff using user_id instead of email/username"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "manage_course_staff"})
         req = api_factory.post(
             "/owly-courses/staff/manage/",
@@ -309,7 +309,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_course_staff_all_roles_calls_logic(self, api_factory):
         """Test listing all users with course staff roles"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_course_staff"})
         req = api_factory.get(
             "/owly-courses/staff/list/",
@@ -325,7 +325,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_course_staff_filter_by_staff_calls_logic(self, api_factory):
         """Test listing only course staff users"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_course_staff"})
         req = api_factory.get(
             "/owly-courses/staff/list/",
@@ -344,7 +344,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_course_staff_filter_by_course_creator_calls_logic(self, api_factory):
         """Test listing only course creator users"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_course_staff"})
         req = api_factory.get(
             "/owly-courses/staff/list/",
@@ -363,7 +363,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_course_staff_different_course_calls_logic(self, api_factory):
         """Test listing staff for different course"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_course_staff"})
         req = api_factory.get(
             "/owly-courses/staff/list/",
@@ -379,7 +379,7 @@ class TestOpenedXCourseViewSet:
 
     def test_add_ora_content_calls_logic(self, api_factory):
         """Test ORA (Open Response Assessment) content creation endpoint"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_ora_content"})
 
         # Test data with complete ORA configuration
@@ -441,7 +441,7 @@ class TestOpenedXCourseViewSet:
 
     def test_add_ora_content_minimal_config(self, api_factory):
         """Test ORA creation with minimal configuration (self-assessment only)"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_ora_content"})
 
         # Minimal ORA configuration
@@ -475,7 +475,7 @@ class TestOpenedXCourseViewSet:
 
     def test_add_ora_content_with_file_upload(self, api_factory):
         """Test adding ORA content with file upload configuration"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_ora_content"})
         req = api_factory.post(
             "/owly-courses/content/ora/",
@@ -502,7 +502,7 @@ class TestOpenedXCourseViewSet:
 
     def test_grade_ora_content_calls_logic(self, api_factory):
         """Test grading an ORA submission"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "grade_ora_content"})
         req = api_factory.post(
             "/owly-courses/content/ora/grade/",
@@ -538,7 +538,7 @@ class TestOpenedXCourseViewSet:
 
     def test_grade_ora_content_minimal_data(self, api_factory):
         """Test grading ORA with minimal required data"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "grade_ora_content"})
         req = api_factory.post(
             "/owly-courses/content/ora/grade/",
@@ -561,7 +561,7 @@ class TestOpenedXCourseViewSet:
 
     def test_grade_ora_content_regrade(self, api_factory):
         """Test regrading an ORA submission"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "grade_ora_content"})
         req = api_factory.post(
             "/owly-courses/content/ora/grade/",
@@ -624,7 +624,7 @@ class TestOpenedXCourseViewSet:
 
     def test_create_cohort_calls_logic(self, api_factory):
         """Test creating a new cohort in a course"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "create_cohort"})
         req = api_factory.post(
             "/owly-courses/cohorts/create/",
@@ -647,7 +647,7 @@ class TestOpenedXCourseViewSet:
 
     def test_create_cohort_with_default_assignment_type(self, api_factory):
         """Test creating a cohort with default assignment type (manual)"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "create_cohort"})
         req = api_factory.post(
             "/owly-courses/cohorts/create/",
@@ -667,7 +667,7 @@ class TestOpenedXCourseViewSet:
 
     def test_create_cohort_random_assignment(self, api_factory):
         """Test creating a cohort with random assignment type"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "create_cohort"})
         req = api_factory.post(
             "/owly-courses/cohorts/create/",
@@ -687,7 +687,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_cohorts_calls_logic(self, api_factory):
         """Test listing all cohorts for a course"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_cohorts"})
         req = api_factory.get(
             "/owly-courses/cohorts/list/",
@@ -702,7 +702,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_cohorts_missing_course_id_returns_error(self, api_factory):
         """Test that missing course_id parameter returns 400 error"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_cohorts"})
         req = api_factory.get("/owly-courses/cohorts/list/")  # No course_id
         user = _auth_user(is_course_staff=True)
@@ -714,7 +714,7 @@ class TestOpenedXCourseViewSet:
 
     def test_add_user_to_cohort_calls_logic(self, api_factory):
         """Test adding a user to a specific cohort"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_user_to_cohort"})
         req = api_factory.post(
             "/owly-courses/cohorts/members/add/",
@@ -736,7 +736,7 @@ class TestOpenedXCourseViewSet:
 
     def test_add_user_to_cohort_with_username(self, api_factory):
         """Test adding a user to cohort using username"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_user_to_cohort"})
         req = api_factory.post(
             "/owly-courses/cohorts/members/add/",
@@ -756,7 +756,7 @@ class TestOpenedXCourseViewSet:
 
     def test_add_user_to_cohort_with_user_id(self, api_factory):
         """Test adding a user to cohort using user ID"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_user_to_cohort"})
         req = api_factory.post(
             "/owly-courses/cohorts/members/add/",
@@ -776,7 +776,7 @@ class TestOpenedXCourseViewSet:
 
     def test_remove_user_from_cohort_calls_logic(self, api_factory):
         """Test removing a user from a specific cohort"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "remove_user_from_cohort"})
         req = api_factory.post(
             "/owly-courses/cohorts/members/remove/",
@@ -798,7 +798,7 @@ class TestOpenedXCourseViewSet:
 
     def test_remove_user_from_cohort_different_identifiers(self, api_factory):
         """Test removing users using different identifier types"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "remove_user_from_cohort"})
 
         # Test with username
@@ -820,7 +820,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_cohort_members_calls_logic(self, api_factory):
         """Test listing all members of a specific cohort"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_cohort_members"})
         req = api_factory.get(
             "/owly-courses/cohorts/members/list/",
@@ -839,7 +839,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_cohort_members_missing_parameters_returns_error(self, api_factory):
         """Test that missing required parameters return 400 errors"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_cohort_members"})
 
         # Missing course_id
@@ -865,7 +865,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_cohort_members_invalid_cohort_id_returns_error(self, api_factory):
         """Test that invalid cohort_id format returns 400 error"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_cohort_members"})
         req = api_factory.get(
             "/owly-courses/cohorts/members/list/",
@@ -882,7 +882,7 @@ class TestOpenedXCourseViewSet:
 
     def test_delete_cohort_calls_logic(self, api_factory):
         """Test deleting a cohort from a course"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"delete": "delete_cohort"})
         req = api_factory.delete(
             "/owly-courses/cohorts/delete/",
@@ -901,7 +901,7 @@ class TestOpenedXCourseViewSet:
 
     def test_delete_cohort_with_superuser_permissions(self, api_factory):
         """Test deleting a cohort with superuser permissions"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"delete": "delete_cohort"})
         req = api_factory.delete(
             "/owly-courses/cohorts/delete/",
@@ -920,7 +920,7 @@ class TestOpenedXCourseViewSet:
 
     def test_delete_cohort_missing_parameters_returns_error(self, api_factory):
         """Test that missing required parameters for deletion return 400 errors"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"delete": "delete_cohort"})
 
         # Missing course_id
@@ -946,7 +946,7 @@ class TestOpenedXCourseViewSet:
 
     def test_delete_cohort_invalid_cohort_id_returns_error(self, api_factory):
         """Test that invalid cohort_id format for deletion returns 400 error"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"delete": "delete_cohort"})
         req = api_factory.delete(
             "/owly-courses/cohorts/delete/",
@@ -963,7 +963,7 @@ class TestOpenedXCourseViewSet:
 
     def test_cohort_management_comprehensive_workflow(self, api_factory):
         """Test a comprehensive workflow of cohort management operations"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
 
         course_id = "course-v1:TestX+CS101+2024"
         user = _auth_user(is_course_staff=True)
@@ -1051,7 +1051,7 @@ class TestOpenedXCourseViewSet:
 
     def test_create_problem_calls_logic(self, api_factory):
         """Test creating a problem component"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "create_problem"})
         req = api_factory.post(
             "/owly-courses/content/problem/create/",
@@ -1072,7 +1072,7 @@ class TestOpenedXCourseViewSet:
 
     def test_publish_content_calls_logic(self, api_factory):
         """Test publishing course content"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "publish_content"})
         req = api_factory.post(
             "/owly-courses/content/publish/",
@@ -1091,7 +1091,7 @@ class TestOpenedXCourseViewSet:
 
     def test_delete_xblock_calls_logic(self, api_factory):
         """Test deleting an xblock component"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "delete_xblock"})
         req = api_factory.post(
             "/owly-courses/xblock/delete/",
@@ -1109,7 +1109,7 @@ class TestOpenedXCourseViewSet:
 
     def test_grade_ora_with_simplified_format(self, api_factory):
         """Test grading ORA with simplified format (no grade_data wrapper)"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "grade_ora_content"})
         req = api_factory.post(
             "/owly-courses/content/ora/grade/",
@@ -1130,7 +1130,7 @@ class TestOpenedXCourseViewSet:
 
     def test_get_ora_details_missing_location(self, api_factory):
         """Test get ORA details without ora_location parameter"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "get_ora_details"})
         req = api_factory.get("/owly-courses/content/ora/details/")
         user = _auth_user(is_course_staff=True)
@@ -1142,7 +1142,7 @@ class TestOpenedXCourseViewSet:
 
     def test_list_ora_submissions_missing_location(self, api_factory):
         """Test list ORA submissions without ora_location parameter"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"get": "list_ora_submissions"})
         req = api_factory.get("/owly-courses/content/ora/submissions/")
         user = _auth_user(is_course_staff=True)
@@ -1156,7 +1156,7 @@ class TestOpenedXCourseViewSet:
         """Test get ORA details when logic returns error (covers lines 556-564)"""
         import sys
 
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
 
         # Mock the logic function to return success=False
 
@@ -1180,7 +1180,7 @@ class TestOpenedXCourseViewSet:
         """Test list ORA submissions when logic returns error (covers lines 623-631)"""
         import sys
 
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
 
         # Mock the logic function to return success=False
 
@@ -1203,7 +1203,7 @@ class TestOpenedXCourseViewSet:
 
 class TestOpenedXAnalyticsViewSet:
     def test_overview_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.analytics import OpenedXAnalyticsViewSet
+        from openedx_owly_apis.views.v1.analytics import OpenedXAnalyticsViewSet
         view = OpenedXAnalyticsViewSet.as_view({"get": "analytics_overview"})
         req = api_factory.get("/owly-analytics/overview/", {"course_id": "course-v1:ORG+NUM+RUN"})
         user = _auth_user()
@@ -1214,7 +1214,7 @@ class TestOpenedXAnalyticsViewSet:
         assert resp.data["kwargs"]["course_id"] == "course-v1:ORG+NUM+RUN"
 
     def test_enrollments_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.analytics import OpenedXAnalyticsViewSet
+        from openedx_owly_apis.views.v1.analytics import OpenedXAnalyticsViewSet
         view = OpenedXAnalyticsViewSet.as_view({"get": "analytics_enrollments"})
         req = api_factory.get("/owly-analytics/enrollments/", {"course_id": "course-v1:ORG+NUM+RUN"})
         user = _auth_user()
@@ -1226,7 +1226,7 @@ class TestOpenedXAnalyticsViewSet:
 
 class TestOpenedXRolesViewSet:
     def test_me_effective_role_resolution(self, api_factory):
-        from openedx_owly_apis.views.roles import OpenedXRolesViewSet
+        from openedx_owly_apis.views.v1.roles import OpenedXRolesViewSet
         view = OpenedXRolesViewSet.as_view({"get": "me"})
         # Course staff takes precedence over creator and authenticated
         user = _auth_user(is_course_staff=True, is_course_creator=True, is_staff=False, is_superuser=False)
@@ -1250,7 +1250,7 @@ class TestOpenedXRolesViewSet:
 
     def test_me_invalid_course_id(self, api_factory):
         """Test /me endpoint with invalid course_id format"""
-        from openedx_owly_apis.views.roles import OpenedXRolesViewSet
+        from openedx_owly_apis.views.v1.roles import OpenedXRolesViewSet
         view = OpenedXRolesViewSet.as_view({"get": "me"})
         user = _auth_user()
         req = api_factory.get("/owly-roles/me/?course_id=invalid-format")
@@ -1261,7 +1261,7 @@ class TestOpenedXRolesViewSet:
 
     def test_me_course_creator_with_org(self, api_factory):
         """Test course creator role with organization parameter"""
-        from openedx_owly_apis.views.roles import OpenedXRolesViewSet
+        from openedx_owly_apis.views.v1.roles import OpenedXRolesViewSet
         view = OpenedXRolesViewSet.as_view({"get": "me"})
         user = _auth_user(is_course_creator=True)
         req = api_factory.get("/owly-roles/me/?org=TestOrg")
@@ -1273,7 +1273,7 @@ class TestOpenedXRolesViewSet:
 
     def test_me_not_course_creator_with_org(self, api_factory):
         """Test user without course creator role but with org parameter (covers line 65)"""
-        from openedx_owly_apis.views.roles import OpenedXRolesViewSet
+        from openedx_owly_apis.views.v1.roles import OpenedXRolesViewSet
         view = OpenedXRolesViewSet.as_view({"get": "me"})
         # User without course creator role, but org is present
         user = _auth_user(is_course_creator=False)
@@ -1288,7 +1288,7 @@ class TestOpenedXRolesViewSet:
 
 class TestOpenedXConfigViewSet:
     def test_enable_owly_chat_calls_logic(self, api_factory):
-        from openedx_owly_apis.views.config_openedx import OpenedXConfigViewSet
+        from openedx_owly_apis.views.v1.config_openedx import OpenedXConfigViewSet
         view = OpenedXConfigViewSet.as_view({"get": "enable_owly_chat"})
         req = api_factory.get("/owly-config/enable_owly_chat/")
         user = _auth_user()
@@ -1355,7 +1355,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_calls_logic(self, api_factory):
         """Test sending bulk email to course participants"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
         req = api_factory.post(
             "/owly-courses/bulk-email/send/",
@@ -1380,7 +1380,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_with_cohort_target(self, api_factory):
         """Test sending bulk email to specific cohort"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
         req = api_factory.post(
             "/owly-courses/bulk-email/send/",
@@ -1403,7 +1403,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_with_schedule(self, api_factory):
         """Test scheduling bulk email for future delivery"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
         req = api_factory.post(
             "/owly-courses/bulk-email/send/",
@@ -1425,7 +1425,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_with_custom_template(self, api_factory):
         """Test sending bulk email with custom template and from address"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
         req = api_factory.post(
             "/owly-courses/bulk-email/send/",
@@ -1449,7 +1449,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_targets_as_json_string(self, api_factory):
         """Test sending bulk email with targets as JSON string"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
         req = api_factory.post(
             "/owly-courses/bulk-email/send/",
@@ -1471,7 +1471,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_targets_as_csv_string(self, api_factory):
         """Test sending bulk email with targets as comma-separated string"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
         req = api_factory.post(
             "/owly-courses/bulk-email/send/",
@@ -1493,7 +1493,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_missing_required_fields(self, api_factory):
         """Test bulk email validation for missing required fields"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
 
         # Missing course_id
@@ -1547,7 +1547,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_invalid_targets_format(self, api_factory):
         """Test bulk email with invalid targets format"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
         req = api_factory.post(
             "/owly-courses/bulk-email/send/",
@@ -1568,7 +1568,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_comprehensive_workflow(self, api_factory):
         """Test a comprehensive bulk email workflow with different scenarios"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
 
         course_id = "course-v1:TestX+CS101+2024"
         user = _auth_user(is_course_staff=True)
@@ -1641,7 +1641,7 @@ class TestBulkEmailAPI:
 
     def test_send_bulk_email_permission_validation(self, api_factory):
         """Test that only authorized users can send bulk emails"""
-        from openedx_owly_apis.views.courses import OpenedXCourseViewSet
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "send_bulk_email"})
 
         # Test with regular authenticated user (no course staff permissions)
@@ -1664,3 +1664,542 @@ class TestBulkEmailAPI:
         resp = view(req)
         assert resp.status_code == 200  # ViewSet passes through, logic handles validation
         assert resp.data["called"] == "send_bulk_email_logic"
+
+
+class TestGradeViewSet:
+    """Tests for the Grades v2 API ViewSet"""
+
+    def test_create_grade_calls_logic_and_returns_payload(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"post": "create"})
+
+        grade_data = {
+            "course_id": "course-v1:test+course+2025",
+            "student_username": "testuser",
+            "unit_id": "block-v1:test+course+2025+type@vertical+block@test123",
+            "grade_value": 85.5,
+            "max_grade": 100.0,
+            "comment": "Great work!"
+        }
+
+        req = api_factory.post("/api/v2/grades/", grade_data, format="json")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req)
+
+        assert resp.status_code == 201
+        assert resp.data["success"] is True
+        assert "data" in resp.data
+        assert resp.data["called"] == "create_grade_logic"
+
+    def test_list_grades_calls_logic_and_returns_payload(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"get": "list"})
+
+        req = api_factory.get("/api/v2/grades/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req)
+
+        assert resp.status_code == 200
+        assert resp.data["success"] is True
+        assert "data" in resp.data
+        assert resp.data["called"] == "list_grades_logic"
+
+    def test_list_grades_with_filters(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"get": "list"})
+
+        req = api_factory.get("/api/v2/grades/?course_id=course-v1:test+course+2025&student_username=testuser")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req)
+
+        assert resp.status_code == 200
+        assert resp.data["success"] is True
+        assert "data" in resp.data
+        assert resp.data["called"] == "list_grades_logic"
+
+    def test_retrieve_grade_calls_logic_and_returns_payload(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"get": "retrieve"})
+
+        grade_id = "course-v1:test+course+2025_testuser_block-v1:test+course+2025+type@vertical+block@test123"
+        req = api_factory.get(f"/api/v2/grades/{grade_id}/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=grade_id)
+
+        assert resp.status_code == 200
+        assert resp.data["success"] is True
+        assert "data" in resp.data
+        assert resp.data["called"] == "get_grade_logic"
+
+    def test_update_grade_calls_logic_and_returns_payload(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"put": "update"})
+
+        grade_id = "course-v1:test+course+2025_testuser_block-v1:test+course+2025+type@vertical+block@test123"
+        update_data = {
+            "course_id": "course-v1:test+course+2025",
+            "student_username": "testuser",
+            "unit_id": "block-v1:test+course+2025+type@vertical+block@test123",
+            "grade_value": 92.0,
+            "max_grade": 100.0,
+            "comment": "Excellent improvement!"
+        }
+
+        req = api_factory.put(f"/api/v2/grades/{grade_id}/", update_data, format="json")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=grade_id)
+
+        assert resp.status_code == 200
+        assert resp.data["success"] is True
+        assert "data" in resp.data
+        assert resp.data["called"] == "update_grade_logic"
+
+    def test_partial_update_grade_calls_logic_and_returns_payload(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"patch": "partial_update"})
+
+        grade_id = "course-v1:test+course+2025_testuser_block-v1:test+course+2025+type@vertical+block@test123"
+        patch_data = {
+            "grade_value": 88.0,
+            "comment": "Good progress"
+        }
+
+        req = api_factory.patch(f"/api/v2/grades/{grade_id}/", patch_data, format="json")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=grade_id)
+
+        assert resp.status_code == 200
+        assert resp.data["success"] is True
+        assert "data" in resp.data
+        assert resp.data["called"] == "update_grade_logic"
+
+    def test_delete_grade_calls_logic_and_returns_payload(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"delete": "destroy"})
+
+        grade_id = "course-v1:test+course+2025_testuser_block-v1:test+course+2025+type@vertical+block@test123"
+        req = api_factory.delete(f"/api/v2/grades/{grade_id}/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=grade_id)
+
+        assert resp.status_code == 204
+        assert resp.data["success"] is True
+        assert resp.data["called"] == "delete_grade_logic"
+
+    def test_create_grade_validation_errors(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"post": "create"})
+
+        # Test missing required fields
+        incomplete_data = {
+            "course_id": "course-v1:test+course+2025",
+            "student_username": "testuser",
+            # Missing unit_id, grade_value, max_grade
+        }
+
+        req = api_factory.post("/api/v2/grades/", incomplete_data, format="json")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req)
+
+        assert resp.status_code == 400
+
+    def test_retrieve_grade_with_invalid_id(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"get": "retrieve"})
+
+        invalid_grade_id = "invalid_grade_id_format"
+        req = api_factory.get(f"/api/v2/grades/{invalid_grade_id}/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=invalid_grade_id)
+
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+        assert "error" in resp.data
+
+    def test_grade_permissions_required(self, api_factory):
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"get": "list"})
+
+        # Test without authentication - expect exception due to JwtAuthentication
+        req = api_factory.get("/api/v2/grades/")
+
+        # The JwtAuthentication will raise an AttributeError in test environment
+        # This is expected behavior for testing
+        try:
+            resp = view(req)
+            # If no exception, should require authentication
+            assert resp.status_code in [401, 403]
+        except AttributeError as e:
+            # Expected in test environment due to JwtAuthentication
+            assert "authenticate_header" in str(e)
+
+    def test_retrieve_grade_without_pk(self, api_factory):
+        """Test retrieve without pk returns error."""
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"get": "retrieve"})
+
+        req = api_factory.get("/api/v2/grades/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=None)
+
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+
+    def test_update_grade_without_pk(self, api_factory):
+        """Test update without pk returns error."""
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"put": "update"})
+
+        req = api_factory.put("/api/v2/grades/", {"grade_value": 90}, format="json")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=None)
+
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+
+    def test_update_grade_with_invalid_id(self, api_factory):
+        """Test update with invalid grade_id returns error."""
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"put": "update"})
+
+        invalid_grade_id = "invalid_format"
+        req = api_factory.put(
+            f"/api/v2/grades/{invalid_grade_id}/",
+            {"grade_value": 90},
+            format="json"
+        )
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=invalid_grade_id)
+
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+
+    def test_delete_grade_without_pk(self, api_factory):
+        """Test delete without pk returns error."""
+        from openedx_owly_apis.views.v2.views import GradeViewSet
+        view = GradeViewSet.as_view({"delete": "destroy"})
+
+        req = api_factory.delete("/api/v2/grades/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, pk=None)
+
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+
+
+class TestValidators:
+    """Tests for the v2 validators module."""
+
+    def test_parse_grade_id_valid(self):
+        """Test parse_grade_id with valid composite ID."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        grade_id = "course-v1:org+course+run_testuser_block-v1:org+course+run+type@vertical+block@abc"
+        course_id, username, unit_id = parse_grade_id(grade_id)
+
+        assert course_id == "course-v1:org+course+run"
+        assert username == "testuser"
+        assert unit_id == "block-v1:org+course+run+type@vertical+block@abc"
+
+    def test_parse_grade_id_empty(self):
+        """Test parse_grade_id with empty string."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        course_id, username, unit_id = parse_grade_id("")
+        assert course_id is None
+        assert username is None
+        assert unit_id is None
+
+    def test_parse_grade_id_none(self):
+        """Test parse_grade_id with None."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        course_id, username, unit_id = parse_grade_id(None)
+        assert course_id is None
+        assert username is None
+        assert unit_id is None
+
+    def test_parse_grade_id_invalid_format(self):
+        """Test parse_grade_id with invalid format."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        course_id, username, unit_id = parse_grade_id("invalid_format")
+        assert course_id is None
+        assert username is None
+        assert unit_id is None
+
+    def test_parse_grade_id_fallback_parsing(self):
+        """Test parse_grade_id fallback parsing with _block-v1: pattern."""
+        from openedx_owly_apis.views.v2.validators import parse_grade_id
+
+        # This format uses the fallback parsing
+        grade_id = "some_course_testuser_block-v1:org+course+run+type@vertical+block@abc"
+        course_id, username, unit_id = parse_grade_id(grade_id)
+
+        assert course_id == "some_course"
+        assert username == "testuser"
+        assert unit_id == "block-v1:org+course+run+type@vertical+block@abc"
+
+    def test_validate_comment_length_none(self):
+        """Test validate_comment_length with None."""
+        from openedx_owly_apis.views.v2.validators import validate_comment_length
+
+        result = validate_comment_length(None)
+        assert result == ""
+
+    def test_validate_comment_length_valid(self):
+        """Test validate_comment_length with valid comment."""
+        from openedx_owly_apis.views.v2.validators import validate_comment_length
+
+        result = validate_comment_length("  Test comment  ")
+        assert result == "Test comment"
+
+    def test_validate_comment_length_too_long(self):
+        """Test validate_comment_length with too long comment."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_comment_length
+
+        long_comment = "x" * 1001
+        with pytest.raises(serializers.ValidationError):
+            validate_comment_length(long_comment)
+
+    def test_validate_pagination_params_valid(self):
+        """Test validate_pagination_params with valid params."""
+        from openedx_owly_apis.views.v2.validators import validate_pagination_params
+
+        result = validate_pagination_params(1, 20)
+        assert result == {'page': 1, 'page_size': 20}
+
+    def test_validate_pagination_params_invalid_page(self):
+        """Test validate_pagination_params with invalid page."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_pagination_params
+
+        with pytest.raises(serializers.ValidationError):
+            validate_pagination_params(0, 20)
+
+    def test_validate_pagination_params_invalid_page_size(self):
+        """Test validate_pagination_params with invalid page_size."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_pagination_params
+
+        with pytest.raises(serializers.ValidationError):
+            validate_pagination_params(1, 0)
+
+    def test_validate_pagination_params_page_size_too_large(self):
+        """Test validate_pagination_params with page_size too large."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_pagination_params
+
+        with pytest.raises(serializers.ValidationError):
+            validate_pagination_params(1, 101)
+
+    def test_validate_bulk_grade_data_not_list(self):
+        """Test validate_bulk_grade_data with non-list input."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data("not a list")
+
+    def test_validate_bulk_grade_data_empty_list(self):
+        """Test validate_bulk_grade_data with empty list."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data([])
+
+    def test_validate_bulk_grade_data_too_many(self):
+        """Test validate_bulk_grade_data with too many items."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        data = [{"course_id": "test"} for _ in range(101)]
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data(data)
+
+    def test_validate_bulk_grade_data_item_not_dict(self):
+        """Test validate_bulk_grade_data with non-dict item."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data(["not a dict"])
+
+    def test_validate_bulk_grade_data_missing_field(self):
+        """Test validate_bulk_grade_data with missing required field."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_bulk_grade_data
+
+        data = [{"course_id": "test", "student_username": "user"}]  # Missing fields
+        with pytest.raises(serializers.ValidationError):
+            validate_bulk_grade_data(data)
+
+    def test_validate_grade_filters_empty(self):
+        """Test validate_grade_filters with empty filters."""
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        result = validate_grade_filters({})
+        assert not result
+
+    def test_validate_grade_filters_with_pagination(self):
+        """Test validate_grade_filters with pagination params."""
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        result = validate_grade_filters({'page': 2, 'page_size': 50})
+        assert result['page'] == 2
+        assert result['page_size'] == 50
+
+    def test_validate_grade_filters_negative_min_grade(self):
+        """Test validate_grade_filters with negative min_grade."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_filters({'min_grade': -1})
+
+    def test_validate_grade_filters_negative_max_grade(self):
+        """Test validate_grade_filters with negative max_grade_filter."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_filters({'max_grade_filter': -1})
+
+    def test_validate_grade_filters_min_greater_than_max(self):
+        """Test validate_grade_filters with min > max."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_filters
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_filters({'min_grade': 100, 'max_grade_filter': 50})
+
+    def test_validate_course_id_empty(self):
+        """Test validate_course_id with empty string."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_course_id
+
+        with pytest.raises(serializers.ValidationError):
+            validate_course_id("")
+
+    def test_validate_unit_id_empty(self):
+        """Test validate_unit_id with empty string."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_unit_id
+
+        with pytest.raises(serializers.ValidationError):
+            validate_unit_id("")
+
+    def test_validate_username_empty(self):
+        """Test validate_username with empty string."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        with pytest.raises(serializers.ValidationError):
+            validate_username("")
+
+    def test_validate_username_too_short(self):
+        """Test validate_username with too short username."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        with pytest.raises(serializers.ValidationError):
+            validate_username("a")
+
+    def test_validate_username_too_long(self):
+        """Test validate_username with too long username."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        with pytest.raises(serializers.ValidationError):
+            validate_username("a" * 151)
+
+    def test_validate_username_invalid_chars(self):
+        """Test validate_username with invalid characters."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        with pytest.raises(serializers.ValidationError):
+            validate_username("user@name!")
+
+    def test_validate_username_valid(self):
+        """Test validate_username with valid username."""
+        from openedx_owly_apis.views.v2.validators import validate_username
+
+        result = validate_username("valid_user-name.123")
+        assert result == "valid_user-name.123"
+
+    def test_validate_grade_range_negative_grade(self):
+        """Test validate_grade_range with negative grade."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_range(-1, 100)
+
+    def test_validate_grade_range_zero_max(self):
+        """Test validate_grade_range with zero max_grade."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_range(50, 0)
+
+    def test_validate_grade_range_grade_exceeds_max(self):
+        """Test validate_grade_range with grade exceeding max."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_range(150, 100)
+
+    def test_validate_grade_range_max_too_large(self):
+        """Test validate_grade_range with max_grade too large."""
+        from rest_framework import serializers
+
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        with pytest.raises(serializers.ValidationError):
+            validate_grade_range(50, 10001)
+
+    def test_validate_grade_range_valid(self):
+        """Test validate_grade_range with valid values."""
+        from openedx_owly_apis.views.v2.validators import validate_grade_range
+
+        result = validate_grade_range(85.5, 100)
+        assert result == {'grade_value': 85.5, 'max_grade': 100}

@@ -159,6 +159,11 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_courses.get_course_tree_logic = _simple_ret("get_course_tree_logic")
     ops_courses.get_vertical_contents_logic = _simple_ret("get_vertical_contents_logic")
     ops_courses.send_bulk_email_logic = _simple_ret("send_bulk_email_logic")
+    ops_courses.create_grade_logic = _simple_ret("create_grade_logic")
+    ops_courses.get_grade_logic = _simple_ret("get_grade_logic")
+    ops_courses.update_grade_logic = _simple_ret("update_grade_logic")
+    ops_courses.delete_grade_logic = _simple_ret("delete_grade_logic")
+    ops_courses.list_grades_logic = _simple_ret("list_grades_logic")
     sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
     stubs.append("openedx_owly_apis.operations.courses")
 

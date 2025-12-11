@@ -5485,3 +5485,967 @@ def send_bulk_email_logic(
             "success": False,
             "message": f"Unexpected error sending bulk email: {exc}",
         }
+
+
+# =====================================
+# Set grades
+# =====================================
+
+def create_grade_logic(
+    course_id: str,
+    student_username: str,
+    unit_id: str,
+    grade_value: float,
+    max_grade: float,
+    comment: str = None,
+    user_identifier=None
+) -> dict:
+    """
+    Create a new grade for a student in a specific unit.
+
+    Args:
+        course_id (str): Course identifier
+        student_username (str): Username of the student to grade
+        unit_id (str): Unit/problem identifier to grade
+        grade_value (float): Grade value to assign
+        max_grade (float): Maximum possible grade
+        comment (str, optional): Comment for the grade
+        user_identifier: User performing the grading operation
+
+    Returns:
+        dict: Result with success status and grade data
+    """
+    try:
+        from common.djangoapps.student.models import User as StudentUser
+        from django.contrib.auth import get_user_model
+        from lms.djangoapps.courseware.models import StudentModule
+        from lms.djangoapps.grades.models import PersistentSubsectionGrade
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from xmodule.modulestore.django import modulestore
+
+        User = get_user_model()
+
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(f"create_grade_logic: User {acting_user.username} creating grade for {student_username}")
+
+        # Validate course
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+
+        if not course:
+            return {
+                'success': False,
+                'error': f'Course not found: {course_id}',
+                'course_id': course_id
+            }
+
+        # Validate student
+        try:
+            student = StudentUser.objects.get(username=student_username)
+        except StudentUser.DoesNotExist:
+            return {
+                'success': False,
+                'error': f'Student not found: {student_username}',
+                'course_id': course_id
+            }
+
+        # Validate unit
+        try:
+            unit_key = UsageKey.from_string(unit_id)
+            unit = store.get_item(unit_key)
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Unit not found: {unit_id}. Error: {str(e)}',
+                'course_id': course_id
+            }
+
+        # Validate grade values
+        if grade_value < 0 or max_grade <= 0:
+            return {
+                'success': False,
+                'error': 'Invalid grade values. Grade must be >= 0 and max_grade must be > 0',
+                'course_id': course_id
+            }
+
+        if grade_value > max_grade:
+            return {
+                'success': False,
+                'error': 'Grade value cannot exceed maximum grade',
+                'course_id': course_id
+            }
+
+        # Create or update the grade using StudentModule
+        import json
+
+        # Prepare state with comment
+        state_data = {'comment': comment or ''}
+        state_json = json.dumps(state_data)
+
+        student_module, created = StudentModule.objects.get_or_create(
+            student=student,
+            course_id=course_key,
+            module_state_key=unit_key,
+            defaults={
+                'state': state_json,
+                'grade': grade_value,
+                'max_grade': max_grade,
+                'done': 'na'
+            }
+        )
+
+        if not created:
+            # Update existing grade
+            student_module.grade = grade_value
+            student_module.max_grade = max_grade
+            student_module.state = state_json
+            student_module.save()
+
+        # Calculate percentage
+        percentage = (grade_value / max_grade) * 100 if max_grade > 0 else 0
+
+        # Create response data
+        grade_data = {
+            'id': f"{course_id}_{student_username}_{unit_id}",
+            'course_id': course_id,
+            'student_username': student_username,
+            'student_email': student.email,
+            'unit_id': unit_id,
+            'unit_name': getattr(unit, 'display_name', 'Unknown Unit'),
+            'grade_value': float(grade_value),
+            'max_grade': float(max_grade),
+            'percentage': round(percentage, 2),
+            'comment': comment or '',
+            'created_at': timezone.now().isoformat(),
+            'updated_at': timezone.now().isoformat(),
+            'graded_by': acting_user.username
+        }
+
+        logger.info(f"Grade created successfully for {student_username} in {unit_id}: {grade_value}/{max_grade}")
+
+        return {
+            'success': True,
+            'message': 'Grade created successfully',
+            'grade': grade_data,
+            'course_id': course_id
+        }
+
+    except Exception as e:
+        logger.error(f"Error creating grade: {e}")
+        return {
+            'success': False,
+            'error': f'Error creating grade: {str(e)}',
+            'course_id': course_id
+        }
+
+
+def get_grade_logic(
+    course_id: str,
+    student_username: str,
+    unit_id: str,
+    user_identifier=None
+) -> dict:
+    """
+    Get a specific grade for a student in a unit.
+
+    Args:
+        course_id (str): Course identifier
+        student_username (str): Username of the student
+        unit_id (str): Unit identifier
+        user_identifier: User requesting the grade information
+
+    Returns:
+        dict: Result with success status and grade data
+    """
+    try:
+        from common.djangoapps.student.models import User as StudentUser
+        from django.contrib.auth import get_user_model
+        from lms.djangoapps.courseware.models import StudentModule
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from xmodule.modulestore.django import modulestore
+
+        User = get_user_model()
+
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(f"get_grade_logic: User {acting_user.username} getting grade for {student_username}")
+
+        # Validate course
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+
+        if not course:
+            return {
+                'success': False,
+                'error': f'Course not found: {course_id}',
+                'course_id': course_id
+            }
+
+        # Validate student
+        try:
+            student = StudentUser.objects.get(username=student_username)
+        except StudentUser.DoesNotExist:
+            return {
+                'success': False,
+                'error': f'Student not found: {student_username}',
+                'course_id': course_id
+            }
+
+        # Validate unit
+        try:
+            unit_key = UsageKey.from_string(unit_id)
+            unit = store.get_item(unit_key)
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Unit not found: {unit_id}. Error: {str(e)}',
+                'course_id': course_id
+            }
+
+        # Get the score based on unit type
+        unit_type = unit_key.block_type
+        logger.info(f"get_grade_logic: Unit type is: {unit_type}")
+
+        grade_value = 0
+        max_grade = 0
+        created_at = timezone.now()
+        updated_at = timezone.now()
+        graded_by = 'System'
+        comment = ''
+
+        if unit_type == 'sequential':
+            # For sequential (subsection), check PersistentSubsectionGrade
+            try:
+                from lms.djangoapps.grades.models import PersistentSubsectionGrade
+                subsection_grade = PersistentSubsectionGrade.objects.get(
+                    user_id=student.id,
+                    course_id=course_key,
+                    usage_key=unit_key
+                )
+                grade_value = subsection_grade.earned_graded
+                max_grade = subsection_grade.possible_graded
+                created_at = subsection_grade.created
+                updated_at = subsection_grade.modified
+                logger.info(f"get_grade_logic: Found subsection grade: {grade_value}/{max_grade}")
+            except PersistentSubsectionGrade.DoesNotExist:
+                return {
+                    'success': False,
+                    'error': f'No subsection grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
+                }
+        else:
+            # For other types (problem, etc.), check StudentModule
+            try:
+                student_module = StudentModule.objects.get(
+                    student=student,
+                    course_id=course_key,
+                    module_state_key=unit_key
+                )
+                if student_module.grade is None:
+                    return {
+                        'success': False,
+                        'error': f'No grade found for student {student_username} in unit {unit_id}',
+                        'course_id': course_id
+                    }
+                grade_value = student_module.grade
+                max_grade = student_module.max_grade
+                created_at = student_module.created
+                updated_at = student_module.modified
+
+                # Extract comment from state field
+                try:
+                    import json
+                    if student_module.state:
+                        state_data = json.loads(student_module.state)
+                        comment = state_data.get('comment', '')
+                except (json.JSONDecodeError, AttributeError):
+                    comment = ''
+
+                logger.info(f"get_grade_logic: Found student module grade: {grade_value}/{max_grade}")
+            except StudentModule.DoesNotExist:
+                return {
+                    'success': False,
+                    'error': f'No grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
+                }
+
+        # Calculate percentage
+        percentage = (grade_value / max_grade) * 100 if max_grade > 0 else 0
+
+        # Create response data
+        grade_data = {
+            'id': f"{course_id}_{student_username}_{unit_id}",
+            'course_id': course_id,
+            'student_username': student_username,
+            'student_email': student.email,
+            'unit_id': unit_id,
+            'unit_name': getattr(unit, 'display_name', 'Unknown Unit'),
+            'grade_value': float(grade_value),
+            'max_grade': float(max_grade),
+            'percentage': round(percentage, 2),
+            'comment': comment,
+            'created_at': created_at.isoformat(),
+            'updated_at': updated_at.isoformat(),
+            'graded_by': graded_by
+        }
+
+        logger.info(f"Grade retrieved successfully for {student_username} in {unit_id}")
+
+        return {
+            'success': True,
+            'grade': grade_data,
+            'course_id': course_id
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting grade: {e}")
+        return {
+            'success': False,
+            'error': f'Error getting grade: {str(e)}',
+            'course_id': course_id
+        }
+
+
+def update_grade_logic(
+    course_id: str,
+    student_username: str,
+    unit_id: str,
+    grade_value: float = None,
+    max_grade: float = None,
+    comment: str = None,
+    user_identifier=None
+) -> dict:
+    """
+    Update an existing grade for a student in a unit.
+
+    Args:
+        course_id (str): Course identifier
+        student_username (str): Username of the student
+        unit_id (str): Unit identifier
+        grade_value (float, optional): New grade value
+        max_grade (float, optional): New maximum grade
+        comment (str, optional): New comment
+        user_identifier: User performing the update
+
+    Returns:
+        dict: Result with success status and updated grade data
+    """
+    try:
+        from common.djangoapps.student.models import User as StudentUser
+        from django.contrib.auth import get_user_model
+        from lms.djangoapps.courseware.models import StudentModule
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from xmodule.modulestore.django import modulestore
+
+        User = get_user_model()
+
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(f"update_grade_logic: User {acting_user.username} updating grade for {student_username}")
+
+        # Validate course
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+
+        if not course:
+            return {
+                'success': False,
+                'error': f'Course not found: {course_id}',
+                'course_id': course_id
+            }
+
+        # Validate student
+        try:
+            student = StudentUser.objects.get(username=student_username)
+        except StudentUser.DoesNotExist:
+            return {
+                'success': False,
+                'error': f'Student not found: {student_username}',
+                'course_id': course_id
+            }
+
+        # Validate unit
+        try:
+            unit_key = UsageKey.from_string(unit_id)
+            unit = store.get_item(unit_key)
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Unit not found: {unit_id}. Error: {str(e)}',
+                'course_id': course_id
+            }
+
+        # Get current grade to use as defaults
+        try:
+            current_student_module = StudentModule.objects.get(
+                student=student,
+                course_id=course_key,
+                module_state_key=unit_key
+            )
+            if current_student_module.grade is None:
+                return {
+                    'success': False,
+                    'error': f'No existing grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
+                }
+        except StudentModule.DoesNotExist:
+            return {
+                'success': False,
+                'error': f'No existing grade found for student {student_username} in unit {unit_id}',
+                'course_id': course_id
+            }
+
+        # Use provided values or keep current ones
+        new_grade_value = grade_value if grade_value is not None else current_student_module.grade
+        new_max_grade = max_grade if max_grade is not None else current_student_module.max_grade
+        new_comment = comment if comment is not None else ''
+
+        # Validate grade values
+        if new_grade_value < 0 or new_max_grade <= 0:
+            return {
+                'success': False,
+                'error': 'Invalid grade values. Grade must be >= 0 and max_grade must be > 0',
+                'course_id': course_id
+            }
+
+        if new_grade_value > new_max_grade:
+            return {
+                'success': False,
+                'error': 'Grade value cannot exceed maximum grade',
+                'course_id': course_id
+            }
+
+        # Update the score using StudentModule
+        import json
+
+        # Prepare state with comment
+        state_data = {'comment': new_comment}
+        state_json = json.dumps(state_data)
+
+        try:
+            student_module = StudentModule.objects.get(
+                student=student,
+                course_id=course_key,
+                module_state_key=unit_key
+            )
+            student_module.grade = new_grade_value
+            student_module.max_grade = new_max_grade
+            student_module.state = state_json
+            student_module.save()
+        except StudentModule.DoesNotExist:
+            # Create new if doesn't exist
+            student_module = StudentModule.objects.create(
+                student=student,
+                course_id=course_key,
+                module_state_key=unit_key,
+                state=state_json,
+                grade=new_grade_value,
+                max_grade=new_max_grade,
+                done='na'
+            )
+
+        # Calculate percentage
+        percentage = (new_grade_value / new_max_grade) * 100 if new_max_grade > 0 else 0
+
+        # Create response data
+        grade_data = {
+            'id': f"{course_id}_{student_username}_{unit_id}",
+            'course_id': course_id,
+            'student_username': student_username,
+            'student_email': student.email,
+            'unit_id': unit_id,
+            'unit_name': getattr(unit, 'display_name', 'Unknown Unit'),
+            'grade_value': float(new_grade_value),
+            'max_grade': float(new_max_grade),
+            'percentage': round(percentage, 2),
+            'comment': new_comment,
+            'created_at': current_student_module.created.isoformat(),
+            'updated_at': timezone.now().isoformat(),
+            'graded_by': acting_user.username
+        }
+
+        logger.info(
+            "Grade updated successfully for %s in %s: %s/%s",
+            student_username,
+            unit_id,
+            new_grade_value,
+            new_max_grade,
+        )
+
+        return {
+            'success': True,
+            'message': 'Grade updated successfully',
+            'grade': grade_data,
+            'course_id': course_id
+        }
+
+    except Exception as e:
+        logger.error(f"Error updating grade: {e}")
+        return {
+            'success': False,
+            'error': f'Error updating grade: {str(e)}',
+            'course_id': course_id
+        }
+
+
+def delete_grade_logic(
+    grade_id: str = None,
+    course_id: str = None,
+    student_username: str = None,
+    unit_id: str = None,
+    user_identifier=None
+) -> dict:
+    """
+    Delete a grade for a student in a unit.
+
+    Args:
+        grade_id (str, optional): Composite grade ID in format 'course_id+student_username+unit_id'
+        course_id (str, optional): Course identifier
+        student_username (str, optional): Username of the student
+        unit_id (str, optional): Unit identifier
+        user_identifier: User performing the deletion
+
+    Returns:
+        dict: Result with success status
+    """
+    try:
+        from common.djangoapps.student.models import User as StudentUser
+        from django.contrib.auth import get_user_model
+        from lms.djangoapps.courseware.models import StudentModule
+        from lms.djangoapps.grades.models import PersistentSubsectionGrade
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from xmodule.modulestore.django import modulestore
+
+        User = get_user_model()
+
+        # Parse grade_id if provided
+        if grade_id:
+            logger.info(f"delete_grade_logic: Parsing grade_id: {grade_id}")
+
+            # Expected format: course_id+student_username+unit_id
+            # Example:
+            #   course-v1:aulasneo+2025+2025_gabriel1407_
+            #   block-v1:aulasneo+2025+2025+type@sequential+
+            #   block@a120efd743f9471f8dea03a0f44a6457
+
+            # Strategy: Look for patterns to identify boundaries
+            # 1. Course ID starts with "course-v1:" and ends before "_username_"
+            # 2. Unit ID starts with "block-v1:"
+
+            # Find the pattern "_username_block-v1:" to split
+            import re
+
+            # Look for pattern: course-v1:...+...+...+username+block-v1:...
+            # The username appears after course ID and before block ID
+            # Analyzing: course-v1:aulasneo+2025+2025_gabriel1407_block-v1:...
+            match = re.match(r'^(course-v1:[^+]+\+[^+]+\+[^_]+)_([^_]+)_(block-v1:.+)$', grade_id)
+
+            logger.info(f"delete_grade_logic: Regex match result: {match}")
+
+            if match:
+                course_id = match.group(1)
+                student_username = match.group(2)
+                unit_id = match.group(3)
+            else:
+                logger.info(f"delete_grade_logic: Regex failed, trying fallback parsing")
+                # Fallback: try to parse manually
+                if '_block-v1:' in grade_id:
+                    logger.info(f"delete_grade_logic: Found _block-v1: in grade_id")
+                    # Split on _block-v1:
+                    before_unit, after_unit = grade_id.split('_block-v1:', 1)
+                    unit_id = 'block-v1:' + after_unit
+
+                    logger.info(f"delete_grade_logic: before_unit: {before_unit}, unit_id: {unit_id}")
+
+                    # Now split the before_unit part to get course and student
+                    # Look for the last underscore before block-v1
+                    parts = before_unit.split('_')
+                    logger.info(f"delete_grade_logic: parts after split: {parts}")
+
+                    if len(parts) >= 2:
+                        student_username = parts[-1]
+                        course_id = '_'.join(parts[:-1])
+                        logger.info(
+                            "delete_grade_logic: Fallback parsed - course_id: %s, "
+                            "student_username: %s",
+                            course_id,
+                            student_username,
+                        )
+                    else:
+                        return {
+                            'success': False,
+                            'error': f'Could not parse grade_id format: {grade_id}'
+                        }
+                else:
+                    return {
+                        'success': False,
+                        'error': (
+                            'Invalid grade_id format. Expected '
+                            'course_id_student_username_unit_id, got: '
+                            f'{grade_id}'
+                        )
+                    }
+
+        # Validate that we have all required parameters
+        if not all([course_id, student_username, unit_id]):
+            return {
+                'success': False,
+                'error': (
+                    'course_id, student_username, and unit_id are required '
+                    '(either individually or via grade_id)'
+                )
+            }
+
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(
+            "delete_grade_logic: User %s deleting grade for %s",
+            acting_user.username,
+            student_username,
+        )
+        logger.info(
+            "delete_grade_logic: Parsed - course_id: %s, student_username: %s, "
+            "unit_id: %s",
+            course_id,
+            student_username,
+            unit_id,
+        )
+
+        # Validate course
+        course_key = CourseKey.from_string(course_id)
+        store = modulestore()
+        course = store.get_course(course_key)
+
+        if not course:
+            return {
+                'success': False,
+                'error': f'Course not found: {course_id}',
+                'course_id': course_id
+            }
+
+        # Validate student
+        try:
+            student = StudentUser.objects.get(username=student_username)
+        except StudentUser.DoesNotExist:
+            return {
+                'success': False,
+                'error': f'Student not found: {student_username}',
+                'course_id': course_id
+            }
+
+        # Validate unit
+        try:
+            unit_key = UsageKey.from_string(unit_id)
+            unit = store.get_item(unit_key)
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Unit not found: {unit_id}. Error: {str(e)}',
+                'course_id': course_id
+            }
+
+        # Check if grade exists - handle different unit types
+        unit_type = unit_key.block_type
+        logger.info(f"delete_grade_logic: Unit type is: {unit_type}")
+
+        if unit_type == 'sequential':
+            # For sequential (subsection), check PersistentSubsectionGrade
+            try:
+                from lms.djangoapps.grades.models import PersistentSubsectionGrade
+                subsection_grade = PersistentSubsectionGrade.objects.get(
+                    user_id=student.id,
+                    course_id=course_key,
+                    usage_key=unit_key
+                )
+                logger.info(f"delete_grade_logic: Found subsection grade: {subsection_grade}")
+            except PersistentSubsectionGrade.DoesNotExist:
+                return {
+                    'success': False,
+                    'error': f'No subsection grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
+                }
+        else:
+            # For other types (problem, etc.), check StudentModule
+            try:
+                student_module = StudentModule.objects.get(
+                    student=student,
+                    course_id=course_key,
+                    module_state_key=unit_key
+                )
+                if student_module.grade is None:
+                    return {
+                        'success': False,
+                        'error': f'No grade found for student {student_username} in unit {unit_id}',
+                        'course_id': course_id
+                    }
+            except StudentModule.DoesNotExist:
+                return {
+                    'success': False,
+                    'error': f'No grade found for student {student_username} in unit {unit_id}',
+                    'course_id': course_id
+                }
+
+        # Delete the score based on unit type
+        try:
+            if unit_type == 'sequential':
+                # Delete subsection grade
+                deleted_count = PersistentSubsectionGrade.objects.filter(
+                    user_id=student.id,
+                    course_id=course_key,
+                    usage_key=unit_key
+                ).delete()
+                logger.info(f"delete_grade_logic: Deleted {deleted_count[0]} subsection grade records")
+
+                # Also delete course-level grade cache to force recalculation
+                from lms.djangoapps.grades.models import PersistentCourseGrade
+                course_deleted = PersistentCourseGrade.objects.filter(
+                    user_id=student.id,
+                    course_id=course_key
+                ).delete()
+                logger.info(f"delete_grade_logic: Deleted {course_deleted[0]} course grade records")
+
+            else:
+                # Delete StudentModule record for problems
+                deleted_count = StudentModule.objects.filter(
+                    student=student,
+                    course_id=course_key,
+                    module_state_key=unit_key
+                ).delete()
+                logger.info(f"delete_grade_logic: Deleted {deleted_count[0]} student module records")
+
+                # Also clean up related subsection and course grades
+                PersistentSubsectionGrade.objects.filter(
+                    user_id=student.id,
+                    course_id=course_key
+                ).delete()
+
+                from lms.djangoapps.grades.models import PersistentCourseGrade
+                PersistentCourseGrade.objects.filter(
+                    user_id=student.id,
+                    course_id=course_key
+                ).delete()
+
+        except Exception as delete_error:
+            logger.error(f"Error deleting grade records: {delete_error}")
+            return {
+                'success': False,
+                'error': f'Error deleting grade: {str(delete_error)}',
+                'course_id': course_id
+            }
+
+        logger.info(f"Grade deleted successfully for {student_username} in {unit_id}")
+
+        return {
+            'success': True,
+            'message': 'Grade deleted successfully',
+            'course_id': course_id,
+            'student_username': student_username,
+            'unit_id': unit_id
+        }
+
+    except Exception as e:
+        logger.error(f"Error deleting grade: {e}")
+        return {
+            'success': False,
+            'error': f'Error deleting grade: {str(e)}',
+            'course_id': course_id
+        }
+
+
+def list_grades_logic(
+    course_id: str = None,
+    student_username: str = None,
+    unit_id: str = None,
+    min_grade: float = None,
+    max_grade_filter: float = None,
+    page: int = 1,
+    page_size: int = 20,
+    user_identifier=None
+) -> dict:
+    """
+    List grades with optional filtering and pagination.
+
+    Args:
+        course_id (str, optional): Filter by course ID
+        student_username (str, optional): Filter by student username
+        unit_id (str, optional): Filter by unit ID
+        min_grade (float, optional): Filter by minimum grade value
+        max_grade_filter (float, optional): Filter by maximum grade value
+        page (int): Page number for pagination
+        page_size (int): Number of items per page
+        user_identifier: User requesting the grade list
+
+    Returns:
+        dict: Result with success status and paginated grade list
+    """
+    try:
+        from common.djangoapps.student.models import User as StudentUser
+        from django.contrib.auth import get_user_model
+        from django.core.paginator import Paginator
+        from lms.djangoapps.grades.models import PersistentSubsectionGrade
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        from xmodule.modulestore.django import modulestore
+
+        User = get_user_model()
+
+        # Get acting user
+        acting_user = User.objects.get(username=user_identifier)
+        logger.info(f"list_grades_logic: User {acting_user.username} listing grades")
+
+        # Get grades from both sources
+        all_grades = []
+
+        # 1. Get subsection grades from PersistentSubsectionGrade
+        subsection_query = PersistentSubsectionGrade.objects.all()
+
+        # 2. Get individual unit grades from StudentModule
+        from lms.djangoapps.courseware.models import StudentModule
+        student_module_query = StudentModule.objects.filter(grade__isnull=False)
+
+        # Apply filters to both queries
+        if course_id:
+            course_key = CourseKey.from_string(course_id)
+            subsection_query = subsection_query.filter(course_id=course_key)
+            student_module_query = student_module_query.filter(course_id=course_key)
+
+        if student_username:
+            try:
+                student = StudentUser.objects.get(username=student_username)
+                subsection_query = subsection_query.filter(user_id=student.id)
+                student_module_query = student_module_query.filter(student=student)
+            except StudentUser.DoesNotExist:
+                return {
+                    'success': False,
+                    'error': f'Student not found: {student_username}'
+                }
+
+        if unit_id:
+            try:
+                unit_key = UsageKey.from_string(unit_id)
+                subsection_query = subsection_query.filter(usage_key=unit_key)
+                student_module_query = student_module_query.filter(module_state_key=unit_key)
+            except Exception as e:
+                return {
+                    'success': False,
+                    'error': f'Invalid unit ID: {unit_id}. Error: {str(e)}'
+                }
+
+        # Apply grade value filters
+        if min_grade is not None:
+            subsection_query = subsection_query.filter(earned_graded__gte=min_grade)
+            student_module_query = student_module_query.filter(grade__gte=min_grade)
+
+        if max_grade_filter is not None:
+            subsection_query = subsection_query.filter(earned_graded__lte=max_grade_filter)
+            student_module_query = student_module_query.filter(grade__lte=max_grade_filter)
+
+        # Combine both queries into a single list with metadata
+        for grade in subsection_query.order_by('-modified'):
+            all_grades.append({
+                'type': 'subsection',
+                'grade': grade,
+                'modified': grade.modified
+            })
+
+        for module in student_module_query.order_by('-modified'):
+            all_grades.append({
+                'type': 'module',
+                'grade': module,
+                'modified': module.modified
+            })
+
+        # Sort combined results by modification date
+        all_grades.sort(key=lambda x: x['modified'], reverse=True)
+
+        # Apply pagination to combined results
+        paginator = Paginator(all_grades, page_size)
+        page_obj = paginator.get_page(page)
+
+        # Build response data
+        grades_list = []
+        store = modulestore()
+
+        for grade_item in page_obj:
+            try:
+                grade_type = grade_item['type']
+                grade = grade_item['grade']
+
+                if grade_type == 'subsection':
+                    # Handle PersistentSubsectionGrade
+                    student = StudentUser.objects.get(id=grade.user_id)
+                    unit = store.get_item(grade.usage_key)
+                    unit_name = getattr(unit, 'display_name', 'Unknown Unit')
+                    percentage = (grade.earned_graded / grade.possible_graded) * 100 if grade.possible_graded > 0 else 0
+
+                    grade_data = {
+                        'id': f"{grade.course_id}_{student.username}_{grade.usage_key}",
+                        'course_id': str(grade.course_id),
+                        'student_username': student.username,
+                        'student_email': student.email,
+                        'unit_id': str(grade.usage_key),
+                        'unit_name': unit_name,
+                        'grade_value': float(grade.earned_graded),
+                        'max_grade': float(grade.possible_graded),
+                        'percentage': round(percentage, 2),
+                        'comment': '',  # PersistentSubsectionGrade doesn't store comments
+                        'created_at': grade.created.isoformat(),
+                        'updated_at': grade.modified.isoformat(),
+                        'graded_by': 'System'
+                    }
+
+                elif grade_type == 'module':
+                    # Handle StudentModule
+                    student = grade.student
+                    unit = store.get_item(grade.module_state_key)
+                    unit_name = getattr(unit, 'display_name', 'Unknown Unit')
+                    percentage = (grade.grade / grade.max_grade) * 100 if grade.max_grade > 0 else 0
+
+                    # Extract comment from state field
+                    comment = ''
+                    try:
+                        import json
+                        if grade.state:
+                            state_data = json.loads(grade.state)
+                            comment = state_data.get('comment', '')
+                    except (json.JSONDecodeError, AttributeError):
+                        comment = ''
+
+                    grade_data = {
+                        'id': f"{grade.course_id}_{student.username}_{grade.module_state_key}",
+                        'course_id': str(grade.course_id),
+                        'student_username': student.username,
+                        'student_email': student.email,
+                        'unit_id': str(grade.module_state_key),
+                        'unit_name': unit_name,
+                        'grade_value': float(grade.grade),
+                        'max_grade': float(grade.max_grade),
+                        'percentage': round(percentage, 2),
+                        'comment': comment,
+                        'created_at': grade.created.isoformat(),
+                        'updated_at': grade.modified.isoformat(),
+                        'graded_by': 'System'
+                    }
+
+                grades_list.append(grade_data)
+
+            except Exception as e:
+                logger.warning(f"Error processing grade {grade_item}: {e}")
+                continue
+
+        logger.info(f"Listed {len(grades_list)} grades")
+
+        return {
+            'success': True,
+            'grades': grades_list
+        }
+
+    except Exception as e:
+        logger.error(f"Error listing grades: {e}")
+        return {
+            'success': False,
+            'error': f'Error listing grades: {str(e)}'
+        }
