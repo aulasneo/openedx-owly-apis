@@ -11,6 +11,22 @@ Change Log
 
 .. There should always be an "Version 1.4.0 (2025-10-22)" section for changes pending release.
 
+Unreleased
+**************************
+
+Added
+=====
+
+* **Grade Management**:
+  - Add grade management operations for student assessments
+
+Changed
+=======
+
+* Simplify API URL structure by removing redundant path prefixes
+* Standardize whitespace and improve logging in grade management operations
+* Extract parse_grade_id function to validators module with comprehensive test coverage
+
 Version 1.5.0 (2025-10-31)
 **************************
 
