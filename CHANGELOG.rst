@@ -18,7 +18,7 @@ Unreleased
 Changed
 =======
 
-* Fix import error
+* Fix import error and quality tests in utilities.
 
 Version 1.6.2 (2025-12-12)
 **************************
