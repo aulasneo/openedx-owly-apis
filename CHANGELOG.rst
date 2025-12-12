@@ -12,6 +12,14 @@ Change Log
 .. There should always be an "Version 1.4.0 (2025-10-22)" section for changes pending release.
 
 
+Unreleased
+**************************
+
+Changed
+=======
+
+* Fix import error
+
 Version 1.6.2 (2025-12-12)
 **************************
 
