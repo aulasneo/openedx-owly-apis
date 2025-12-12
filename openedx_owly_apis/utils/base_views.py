@@ -1,6 +1,9 @@
+from typing import Type
+
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.serializers import Serializer
 from rest_framework.viewsets import ModelViewSet
 
 
@@ -41,8 +44,13 @@ class BaseCRUDViewSet(ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """Create a new object"""
-        serializer_class = self.get_create_serializer_class()
-        serializer = serializer_class(data=request.data)
+        create_serializer_factory: Type[Serializer] = self.get_create_serializer_class()
+        if not callable(create_serializer_factory):
+            raise NotImplementedError(
+                f"{self.__class__.__name__}.get_create_serializer_class must return a serializer class"
+            )
+        # pylint: disable-next=not-callable
+        serializer = create_serializer_factory(data=request.data)
 
         if serializer.is_valid():
             serializer.save()
@@ -55,10 +63,15 @@ class BaseCRUDViewSet(ModelViewSet):
     def update(self, request, *args, **kwargs):
         """Update an existing object"""
         instance = self.get_object()
-        serializer_class = self.get_update_serializer_class()
+        update_serializer_factory: Type[Serializer] = self.get_update_serializer_class()
+        if not callable(update_serializer_factory):
+            raise NotImplementedError(
+                f"{self.__class__.__name__}.get_update_serializer_class must return a serializer class"
+            )
         partial = kwargs.pop('partial', False)
 
-        serializer = serializer_class(instance, data=request.data, partial=partial)
+        # pylint: disable-next=not-callable
+        serializer = update_serializer_factory(instance, data=request.data, partial=partial)
 
         if serializer.is_valid():
             serializer.save()
@@ -111,8 +124,13 @@ class BaseAPIViewSet(BaseCRUDViewSet):
     def create(self, request, *args, **kwargs):
         """Create a new object using external API logic"""
         # Use serializer for validation
-        serializer_class = self.get_create_serializer_class()
-        serializer = serializer_class(data=request.data)
+        create_serializer_factory: Type[Serializer] = self.get_create_serializer_class()
+        if not callable(create_serializer_factory):
+            raise NotImplementedError(
+                f"{self.__class__.__name__}.get_create_serializer_class must return a serializer class"
+            )
+        # pylint: disable-next=not-callable
+        serializer = create_serializer_factory(data=request.data)
 
         if not serializer.is_valid():
             return Response({
@@ -129,8 +147,9 @@ class BaseAPIViewSet(BaseCRUDViewSet):
         status_code = status.HTTP_201_CREATED if result.get('success') else status.HTTP_400_BAD_REQUEST
         return Response(result, status=status_code)
 
-    def update(self, request, pk=None, *args, **kwargs):
+    def update(self, request, *args, **kwargs):
         """Update an existing object using external API logic"""
+        pk = kwargs.get('pk')
         if not pk:
             return Response({
                 'success': False,
@@ -139,9 +158,14 @@ class BaseAPIViewSet(BaseCRUDViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         # Use serializer for validation
-        serializer_class = self.get_update_serializer_class()
+        update_serializer_factory: Type[Serializer] = self.get_update_serializer_class()
+        if not callable(update_serializer_factory):
+            raise NotImplementedError(
+                f"{self.__class__.__name__}.get_update_serializer_class must return a serializer class"
+            )
         partial = kwargs.get('partial', False)
-        serializer = serializer_class(data=request.data, partial=partial)
+        # pylint: disable-next=not-callable
+        serializer = update_serializer_factory(data=request.data, partial=partial)
 
         if not serializer.is_valid():
             return Response({
@@ -158,8 +182,9 @@ class BaseAPIViewSet(BaseCRUDViewSet):
         status_code = status.HTTP_200_OK if result.get('success') else status.HTTP_400_BAD_REQUEST
         return Response(result, status=status_code)
 
-    def destroy(self, request, pk=None, *args, **kwargs):
+    def destroy(self, request, *args, **kwargs):
         """Delete an object using external API logic"""
+        pk = kwargs.get('pk')
         if not pk:
             return Response({
                 'success': False,
