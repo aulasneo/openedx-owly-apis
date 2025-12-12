@@ -5,11 +5,16 @@ This module provides consistent error handling and response formatting
 for the v2 API endpoints.
 """
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from opaque_keys import InvalidKeyError
 from rest_framework import status
+
+try:
+    from opaque_keys import InvalidKeyError
+except ImportError:
+    class InvalidKeyError(Exception):
+        pass
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
@@ -128,21 +133,21 @@ def handle_openedx_errors(func):
                 f"Invalid OpenEdX identifier: {str(e)}",
                 'INVALID_OPENEDX_KEY',
                 400
-            )
+            ) from e
         except DjangoValidationError as e:
             logger.error(f"Django validation error: {e}")
             raise GradeAPIException(
                 f"Validation error: {str(e)}",
                 'VALIDATION_ERROR',
                 400
-            )
+            ) from e
         except Exception as e:
             logger.error(f"Unexpected error in {func.__name__}: {e}")
             raise GradeAPIException(
                 f"Unexpected error: {str(e)}",
                 'UNEXPECTED_ERROR',
                 500
-            )
+            ) from e
 
     return wrapper
 

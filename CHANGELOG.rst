@@ -11,6 +11,23 @@ Change Log
 
 .. There should always be an "Version 1.4.0 (2025-10-22)" section for changes pending release.
 
+
+Version 1.6.2 (2025-12-12)
+**************************
+
+Changed
+=======
+
+* Fix quality errors
+
+Version 1.6.1 (2025-12-12)
+**************************
+
+Changed
+=======
+
+* Fix import of views.
+
 Version 1.6.0 (2025-12-11)
 **************************
 
