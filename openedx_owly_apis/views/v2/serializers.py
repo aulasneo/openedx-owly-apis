@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from rest_framework import serializers
 
-from .validators import GradeValidationMixin, validate_grade_range
+from .validators import GradeValidationMixin
 
 
 class GradeCreateSerializer(serializers.Serializer, GradeValidationMixin):

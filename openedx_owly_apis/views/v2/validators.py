@@ -57,7 +57,7 @@ def parse_grade_id(grade_id: str) -> tuple:
                 return course_id, student_username, unit_id
 
         return None, None, None
-    except Exception:
+    except (ValueError, AttributeError):
         return None, None, None
 
 
@@ -79,11 +79,11 @@ def validate_course_id(course_id: str) -> str:
 
     try:
         CourseKey.from_string(course_id)
-    except InvalidKeyError:
+    except InvalidKeyError as e:
         raise serializers.ValidationError(
             f"Invalid course ID format: {course_id}. "
             "Expected format: course-v1:ORG+COURSE+RUN"
-        )
+        ) from e
 
     return course_id
 
@@ -106,11 +106,11 @@ def validate_unit_id(unit_id: str) -> str:
 
     try:
         UsageKey.from_string(unit_id)
-    except InvalidKeyError:
+    except InvalidKeyError as e:
         raise serializers.ValidationError(
             f"Invalid unit ID format: {unit_id}. "
             "Expected format: block-v1:ORG+COURSE+RUN+type@TYPE+block@BLOCK"
-        )
+        ) from e
 
     return unit_id
 

@@ -1,5 +1,3 @@
-from typing import Any, Dict
-
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
 from openedx.core.lib.api.authentication import BearerAuthentication
 from rest_framework import status
@@ -92,8 +90,9 @@ class GradeViewSet(BaseAPIViewSet):
             )
 
     @swagger_retrieve_grade
-    def retrieve(self, request, pk=None):
+    def retrieve(self, request, *args, **kwargs):
         """Get a specific grade by ID."""
+        pk = kwargs.get('pk')
         if not pk:
             return Response(
                 {
@@ -142,8 +141,9 @@ class GradeViewSet(BaseAPIViewSet):
             )
 
     @swagger_update_grade
-    def update(self, request, pk=None):
+    def update(self, request, *args, **kwargs):
         """Update an existing grade."""
+        pk = kwargs.get('pk')
         if not pk:
             return Response(
                 {
@@ -200,13 +200,14 @@ class GradeViewSet(BaseAPIViewSet):
             )
 
     @swagger_partial_update_grade
-    def partial_update(self, request, pk=None):
+    def partial_update(self, request, *args, **kwargs):
         """Partially update an existing grade (same as update for this use case)."""
-        return self.update(request, pk)
+        return self.update(request, *args, **kwargs)
 
     @swagger_delete_grade
-    def destroy(self, request, pk=None):
+    def destroy(self, request, *args, **kwargs):
         """Delete a grade by ID."""
+        pk = kwargs.get('pk')
         if not pk:
             return Response(
                 {
@@ -241,7 +242,7 @@ class GradeViewSet(BaseAPIViewSet):
             )
 
     @swagger_list_grades
-    def list(self, request):
+    def list(self, request, *args, **kwargs):
         """List grades with optional filtering and pagination."""
         # Validate query parameters
         query_serializer = GradeListQuerySerializer(data=request.query_params)
@@ -278,3 +279,19 @@ class GradeViewSet(BaseAPIViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+    # Override abstract methods from BaseAPIViewSet to satisfy pylint
+    def perform_create_logic(self, *args, **kwargs):
+        return None
+
+    def perform_update_logic(self, *args, **kwargs):
+        return None
+
+    def perform_partial_update_logic(self, *args, **kwargs):
+        return None
+
+    def perform_destroy_logic(self, *args, **kwargs):
+        return None
+
+    def perform_list_logic(self, *args, **kwargs):
+        return None

@@ -5,8 +5,9 @@ This module contains all the Swagger documentation schemas separated from
 the view logic to maintain clean code principles.
 """
 from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 
-from .serializers import GradeCreateSerializer, GradeResponseSerializer, GradeUpdateSerializer
+from .serializers import GradeCreateSerializer, GradeUpdateSerializer
 
 
 class GradeSwaggerSchemas:
@@ -304,35 +305,29 @@ class GradeSwaggerSchemas:
 # Decorators para usar en las views
 def swagger_create_grade(func):
     """Decorator for create grade endpoint."""
-    from drf_yasg.utils import swagger_auto_schema
     return swagger_auto_schema(**GradeSwaggerSchemas.get_create_schema())(func)
 
 
 def swagger_retrieve_grade(func):
     """Decorator for retrieve grade endpoint."""
-    from drf_yasg.utils import swagger_auto_schema
     return swagger_auto_schema(**GradeSwaggerSchemas.get_retrieve_schema())(func)
 
 
 def swagger_update_grade(func):
     """Decorator for update grade endpoint."""
-    from drf_yasg.utils import swagger_auto_schema
     return swagger_auto_schema(**GradeSwaggerSchemas.get_update_schema())(func)
 
 
 def swagger_partial_update_grade(func):
     """Decorator for partial update grade endpoint."""
-    from drf_yasg.utils import swagger_auto_schema
     return swagger_auto_schema(**GradeSwaggerSchemas.get_partial_update_schema())(func)
 
 
 def swagger_delete_grade(func):
     """Decorator for delete grade endpoint."""
-    from drf_yasg.utils import swagger_auto_schema
     return swagger_auto_schema(**GradeSwaggerSchemas.get_delete_schema())(func)
 
 
 def swagger_list_grades(func):
     """Decorator for list grades endpoint."""
-    from drf_yasg.utils import swagger_auto_schema
     return swagger_auto_schema(**GradeSwaggerSchemas.get_list_schema())(func)
