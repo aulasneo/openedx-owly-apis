@@ -2,4 +2,5 @@
 
 -c constraints.txt
 
+platformdirs==4.4.0       # Keep CI/dev tooling aligned with pylint's current dependency graph
 tox                       # Virtualenv management for tests

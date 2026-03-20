@@ -1,3 +1,5 @@
+import sys
+import types
 from types import SimpleNamespace
 
 from openedx_owly_apis.operations import config as config_ops
@@ -35,9 +37,6 @@ def test_is_owly_chat_enabled_for_authenticated_user(monkeypatch):
 
     request = SimpleNamespace(user=SimpleNamespace(is_authenticated=True, username="tester", id=1))
 
-    import sys
-    import types
-
     waffle_models = types.ModuleType("waffle.models")
     waffle_models.Flag = flag_model
     sys.modules["waffle.models"] = waffle_models
@@ -49,11 +48,8 @@ def test_is_owly_chat_enabled_for_authenticated_user(monkeypatch):
     assert config_ops.is_owly_chat_enabled_logic(request) == {"enabled": True}
 
 
-def test_is_owly_chat_enabled_for_anonymous_user(monkeypatch):
+def test_is_owly_chat_enabled_for_anonymous_user():
     flag_model = type("Flag", (), {"objects": _Manager(_Flag(False)), "DoesNotExist": _FlagModel.DoesNotExist})
-
-    import sys
-    import types
 
     waffle_models = types.ModuleType("waffle.models")
     waffle_models.Flag = flag_model
@@ -70,9 +66,6 @@ def test_is_owly_chat_enabled_for_anonymous_user(monkeypatch):
 
 def test_is_owly_chat_enabled_returns_false_when_flag_missing():
     flag_model = type("Flag", (), {"objects": _MissingManager(), "DoesNotExist": _FlagModel.DoesNotExist})
-
-    import sys
-    import types
 
     waffle_models = types.ModuleType("waffle.models")
     waffle_models.Flag = flag_model

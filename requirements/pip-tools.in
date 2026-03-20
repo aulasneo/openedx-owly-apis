@@ -2,4 +2,5 @@
 
 -c constraints.txt
 
+click==8.1.8              # Keep tooling aligned with the rest of the repo to avoid dev lock conflicts
 pip-tools                 # Contains pip-compile, used to generate pip requirements files
