@@ -28,6 +28,7 @@ def is_owly_chat_enabled_logic(request) -> Dict[str, bool]:
     """
     try:
         # waffle is available in edx-platform; this respects request/user context
+        from waffle import flag_is_active
         from waffle.models import Flag
 
         # Verificar que el flag existe
@@ -41,7 +42,7 @@ def is_owly_chat_enabled_logic(request) -> Dict[str, bool]:
         user = request.user
 
         # Verificar si el usuario está autenticado (no es AnonymousUser)
-        if user:
+        if getattr(user, "is_authenticated", False):
             enabled = bool(flag.is_active_for_user(user))
             logger.info(f"Authenticated user {user.username} (ID: {user.id}) has flag {FLAG_NAME} enabled: {enabled}")
         else:

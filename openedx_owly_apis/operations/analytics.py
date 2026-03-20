@@ -66,7 +66,7 @@ def get_overview_analytics_logic(course_id: str = None):
                     "total_courses": all_courses.count(),
                     "total_active_enrollments": total_enrollments,
                 },
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": timezone.now().isoformat(),
             }
     except Exception as e:
         return {"error": f"Error getting overview analytics: {str(e)}"}
@@ -209,7 +209,7 @@ def get_detailed_analytics_logic(course_id: str):
                     "is_full": CourseEnrollment.objects.is_course_full(course),
                 },
             },
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": timezone.now().isoformat(),
         }
     except Exception as e:
         return {"error": f"Error getting detailed analytics: {str(e)}"}

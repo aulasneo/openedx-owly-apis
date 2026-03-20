@@ -192,8 +192,7 @@ def get_course_tree_logic(
             try:
                 item = ms.get_item(usage_key)
             except Exception as get_item_err:
-                logger.error(f"Failed to get item {usage_key} from modulestore: {get_item_err}")
-                print(f"===> ERROR get_item usage_key={usage_key} err={get_item_err}")
+                logger.error("Failed to get item %s from modulestore: %s", usage_key, get_item_err)
                 return None
 
             node = {
@@ -261,7 +260,6 @@ def get_course_tree_logic(
             with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
                 tree = _build_modulestore_tree(store, starting_block_usage_key, depth)
                 debug_meta["branch_used"] = "draft_preferred"
-            print(f"===> modulestore traversal draft_preferred done. has_tree={bool(tree)}")
             # If draft tree is empty/None, try PUBLISHED
             if not tree or (isinstance(tree, dict) and not tree.get('children') and tree.get('type') != 'course'):
                 with store.branch_setting(ModuleStoreEnum.Branch.published_only):
@@ -269,7 +267,6 @@ def get_course_tree_logic(
                     if tree_p:
                         tree = tree_p
                         debug_meta["branch_used"] = "published_only"
-                        print(f"===> modulestore traversal switched to published_only. has_tree={bool(tree)}")
 
             if tree:
                 response = {
@@ -278,13 +275,7 @@ def get_course_tree_logic(
                     "original_course_id": course_id if course_id != str(course_key) else None,
                     "root": str(starting_block_usage_key),
                     "structure": tree,
-                    "_debug": debug_meta,
                 }
-                try:
-                    top_children = len(response.get('structure', {}).get('children', []) or [])
-                except Exception:
-                    top_children = 'n/a'
-                print(f"===> RETURN modulestore TREE branch={debug_meta['branch_used']} top_children={top_children}")
                 # Handle search on the built tree
                 if search_id or search_type or search_name:
                     sr = _collect_search_results_from_tree(tree)
@@ -299,8 +290,7 @@ def get_course_tree_logic(
                     response["search_count"] = len(sr)
                 return response
         except Exception as ms_err:
-            logger.warning(f"Modulestore traversal failed, will fallback to course_blocks API: {ms_err}")
-            print(f"===> WARNING modulestore traversal failed, fallback to course_blocks. err={ms_err}")
+            logger.warning("Modulestore traversal failed, falling back to course_blocks API: %s", ms_err)
 
         # Get course blocks structure with cache recovery
         # Use draft branch for Studio courses
@@ -314,10 +304,6 @@ def get_course_tree_logic(
             logger.info(
                 "Successfully retrieved course blocks for %s",
                 starting_block_usage_key,
-            )
-            print(
-                f"===> course_blocks SUCCESS draft_preferred "
-                f"starting_block={starting_block_usage_key}"
             )
         except Exception as e:
             logger.error(
@@ -337,9 +323,6 @@ def get_course_tree_logic(
                     "Detected cache issue, attempting to clear and regenerate block structure for %s",
                     course_key,
                 )
-                print(
-                    f"===> CACHE issue detected. Clearing cache for course_key={course_key}"
-                )
                 try:
                     # Clear the block structure cache and regenerate
                     from openedx.core.djangoapps.content.block_structure.api import clear_course_from_cache
@@ -356,17 +339,10 @@ def get_course_tree_logic(
                         "Successfully retrieved course blocks after cache clear for %s",
                         starting_block_usage_key,
                     )
-                    print(
-                        f"===> course_blocks SUCCESS after cache clear "
-                        f"starting_block={starting_block_usage_key}"
-                    )
                 except Exception as retry_error:
                     logger.error(
                         "Failed to retrieve course blocks even after cache clear: %s",
                         retry_error,
-                    )
-                    print(
-                        f"===> ERROR course_blocks after cache clear err={retry_error}"
                     )
                     return {
                         "success": False,
@@ -379,7 +355,6 @@ def get_course_tree_logic(
                         "starting_block": str(starting_block_usage_key)
                     }
             else:
-                print(f"===> ERROR course_blocks not cache-related. err={e}")
                 return {
                     "success": False,
                     "error": "course_blocks_not_found",

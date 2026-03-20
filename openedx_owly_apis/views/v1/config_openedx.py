@@ -1,5 +1,7 @@
 import logging
 
+from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
+from openedx.core.lib.api.authentication import BearerAuthentication
 from rest_framework import viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
@@ -15,7 +17,11 @@ class OpenedXConfigViewSet(viewsets.ViewSet):
     """
     ViewSet para configuracuión de la plataforma Open edX.
     """
-    authentication_classes = [SessionAuthentication]
+    authentication_classes = (
+        JwtAuthentication,
+        BearerAuthentication,
+        SessionAuthentication,
+    )
 
     @action(
         detail=False,

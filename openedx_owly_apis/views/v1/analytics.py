@@ -15,6 +15,12 @@ from openedx_owly_apis.operations.analytics import (
 from openedx_owly_apis.permissions import IsAdminOrCourseStaff
 
 
+def _response_for_analytics_result(result):
+    """Map analytics logic results to an HTTP response."""
+    status_code = 400 if result.get("error") or result.get("success") is False else 200
+    return Response(result, status=status_code)
+
+
 class OpenedXAnalyticsViewSet(viewsets.ViewSet):
     """
     ViewSet para analíticas de cursos OpenedX
@@ -34,7 +40,7 @@ class OpenedXAnalyticsViewSet(viewsets.ViewSet):
         """
         course_id = request.query_params.get('course_id')
         result = get_overview_analytics_logic(course_id)
-        return Response(result)
+        return _response_for_analytics_result(result)
 
     @action(detail=False, methods=['get'], url_path='enrollments')
     def analytics_enrollments(self, request):
@@ -43,7 +49,7 @@ class OpenedXAnalyticsViewSet(viewsets.ViewSet):
         """
         course_id = request.query_params.get('course_id')
         result = get_enrollments_analytics_logic(course_id)
-        return Response(result)
+        return _response_for_analytics_result(result)
 
     @action(detail=False, methods=['get'], url_path='discussions')
     def analytics_discussions(self, request):
@@ -52,7 +58,7 @@ class OpenedXAnalyticsViewSet(viewsets.ViewSet):
         """
         course_id = request.query_params.get('course_id')
         result = get_discussions_analytics_logic(course_id)
-        return Response(result)
+        return _response_for_analytics_result(result)
 
     @action(detail=False, methods=['get'], url_path='detailed')
     def analytics_detailed(self, request):
@@ -61,4 +67,4 @@ class OpenedXAnalyticsViewSet(viewsets.ViewSet):
         """
         course_id = request.query_params.get('course_id')
         result = get_detailed_analytics_logic(course_id)
-        return Response(result)
+        return _response_for_analytics_result(result)

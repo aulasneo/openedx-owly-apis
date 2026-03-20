@@ -11,6 +11,31 @@ Change Log
 
 .. There should always be an "Version 1.4.0 (2025-10-22)" section for changes pending release.
 
+Unreleased
+**********
+
+Changed
+=======
+
+* Align package metadata and tox targets with the Teak-era Open edX stack:
+  - keep Django support at ``4.2``
+  - advertise Python ``3.11`` and ``3.12``
+  - remove the obsolete universal wheel setting
+* Refresh generated requirements files and add missing runtime dependencies used by the plugin:
+  - ``edx-django-utils``
+  - ``edx-drf-extensions``
+* Normalize the config endpoint authentication classes to support JWT, Bearer, and Session auth.
+* Make analytics timestamps timezone-aware in test and runtime code.
+
+Fixed
+=====
+
+* Fix waffle flag evaluation for anonymous requests by importing and using ``flag_is_active`` correctly.
+* Return ``400`` from analytics endpoints when the logic layer reports an error instead of always responding with ``200``.
+* Return a payload with ``200`` for grade deletion instead of pairing a response body with ``204 No Content``.
+* Remove leaked course tree debug metadata and raw ``print(...)`` tracing from the public API path.
+* Add regression coverage for waffle flag evaluation and analytics error handling.
+
 
 Version 1.6.3 (2025-12-12)
 **************************

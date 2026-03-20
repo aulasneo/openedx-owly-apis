@@ -230,7 +230,7 @@ class GradeViewSet(BaseAPIViewSet):
                     'message': result.get('message', 'Grade deleted successfully'),  # Default message
                     'called': result.get('called')  # Include for testing
                 },
-                status=status.HTTP_204_NO_CONTENT
+                status=status.HTTP_200_OK
             )
         else:
             return Response(

@@ -1223,6 +1223,24 @@ class TestOpenedXAnalyticsViewSet:
         assert resp.status_code == 200
         assert resp.data["called"] == "get_enrollments_analytics_logic"
 
+    def test_overview_returns_400_when_logic_reports_error(self, api_factory, monkeypatch):
+        from openedx_owly_apis.views.v1 import analytics as analytics_views
+
+        view = analytics_views.OpenedXAnalyticsViewSet.as_view({"get": "analytics_overview"})
+        monkeypatch.setattr(
+            analytics_views,
+            "get_overview_analytics_logic",
+            lambda _course_id: {"error": "boom"},
+        )
+        req = api_factory.get("/owly-analytics/overview/", {"course_id": "course-v1:ORG+NUM+RUN"})
+        user = _auth_user()
+        force_authenticate(req, user=user)
+
+        resp = view(req)
+
+        assert resp.status_code == 400
+        assert resp.data["error"] == "boom"
+
 
 class TestOpenedXRolesViewSet:
     def test_me_effective_role_resolution(self, api_factory):
@@ -1789,7 +1807,7 @@ class TestGradeViewSet:
         force_authenticate(req, user=user)
         resp = view(req, pk=grade_id)
 
-        assert resp.status_code == 204
+        assert resp.status_code == 200
         assert resp.data["success"] is True
         assert resp.data["called"] == "delete_grade_logic"
 

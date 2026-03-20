@@ -43,6 +43,7 @@ LOCALE_PATHS = [
 ROOT_URLCONF = 'tests.urls'
 
 SECRET_KEY = 'insecure-secret-key'
+USE_TZ = True
 
 MIDDLEWARE = (
     'django.contrib.auth.middleware.AuthenticationMiddleware',

@@ -131,7 +131,7 @@ CHANGELOG = open(os.path.join(os.path.dirname(__file__), 'CHANGELOG.rst'), encod
 setup(
     name='openedx-owly-apis',
     version=VERSION,
-    description="""One-line description for README and other doc files.""",
+    description="Extra Open edX REST APIs for analytics, course management, and grading.",
     long_description=README + '\n\n' + CHANGELOG,
     long_description_content_type='text/x-rst',
     author='lberoes@aulasneo.com',
@@ -152,11 +152,11 @@ setup(
         'Development Status :: 3 - Alpha',
         'Framework :: Django',
         'Framework :: Django :: 4.2',
-        'Framework :: Django :: 5.2',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
         'Natural Language :: English',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
     ],
 
