@@ -11,6 +11,17 @@ Change Log
 
 .. There should always be an "Version 1.4.0 (2025-10-22)" section for changes pending release.
 
+Unreleased
+**********
+
+Fixed
+=====
+
+* Reject invalid course structure payloads that use unsupported shapes such as ``units_config.sections`` instead of the supported ``units_config.units`` format.
+* Return an explicit error when a course structure request would otherwise succeed as an empty no-op with ``created_structure: []``.
+* Add regression coverage for course structure payload validation.
+
+
 Version 2.0.0 (2026-03-20)
 **************************
 
