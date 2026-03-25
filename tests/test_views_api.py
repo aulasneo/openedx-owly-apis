@@ -69,7 +69,7 @@ class TestOpenedXCourseViewSet:
         view = OpenedXCourseViewSet.as_view({"post": "create_structure"})
         req = api_factory.post(
             "/owly-courses/structure/",
-            {"course_id": "course-v1:ORG+NUM+RUN", "units_config": {"sections": []}, "edit": True},
+            {"course_id": "course-v1:ORG+NUM+RUN", "units_config": {"units": []}, "edit": True},
             format="json",
         )
         user = _auth_user()
