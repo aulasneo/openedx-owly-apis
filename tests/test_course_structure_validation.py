@@ -1,7 +1,8 @@
-def test_create_course_structure_validation_rejects_sections_shape():
-    from openedx_owly_apis.operations.courses import _validate_course_structure_payload
+from openedx_owly_apis.operations.course_structure_validation import validate_course_structure_payload
 
-    result = _validate_course_structure_payload(
+
+def test_create_course_structure_validation_rejects_sections_shape():
+    result = validate_course_structure_payload(
         {
             "sections": [
                 {
@@ -17,9 +18,7 @@ def test_create_course_structure_validation_rejects_sections_shape():
 
 
 def test_create_course_structure_validation_accepts_supported_shape():
-    from openedx_owly_apis.operations.courses import _validate_course_structure_payload
-
-    result = _validate_course_structure_payload(
+    result = validate_course_structure_payload(
         {
             "units": [
                 {
@@ -41,9 +40,7 @@ def test_create_course_structure_validation_accepts_supported_shape():
 
 
 def test_create_course_structure_validation_requires_names():
-    from openedx_owly_apis.operations.courses import _validate_course_structure_payload
-
-    result = _validate_course_structure_payload(
+    result = validate_course_structure_payload(
         {
             "units": [
                 {
