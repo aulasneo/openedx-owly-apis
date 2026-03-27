@@ -1948,6 +1948,7 @@ def create_openedx_problem_logic(
 
 def _generate_problem_xml(problem_type: str, problem_data: dict, display_name: str) -> str:
     """Generate XML for different problem types"""
+    problem_data = _normalize_problem_data(problem_data)
 
     if problem_type == "multiplechoiceresponse":
         return _generate_multiple_choice_xml(problem_data, display_name)
@@ -1961,6 +1962,36 @@ def _generate_problem_xml(problem_type: str, problem_data: dict, display_name: s
         return _generate_dropdown_xml(problem_data, display_name)
     else:
         return _generate_generic_problem_xml(problem_data, display_name)
+
+
+def _normalize_problem_data(problem_data):
+    """Normalize problem payloads coming from different clients."""
+    if problem_data is None:
+        return {}
+
+    if not isinstance(problem_data, dict):
+        return {"question_text": str(problem_data)}
+
+    normalized = dict(problem_data)
+
+    if "question_text" not in normalized and "question" in normalized:
+        normalized["question_text"] = normalized.get("question")
+
+    if "correct_answer" not in normalized and "answer" in normalized:
+        normalized["correct_answer"] = normalized.get("answer")
+
+    choices = normalized.get("choices")
+    if choices is None:
+        return normalized
+
+    if isinstance(choices, tuple):
+        normalized["choices"] = list(choices)
+    elif isinstance(choices, str):
+        normalized["choices"] = [choices]
+    elif not isinstance(choices, list):
+        normalized["choices"] = [str(choices)]
+
+    return normalized
 
 
 def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
@@ -2261,7 +2292,14 @@ def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
                 correct_answer = choice['text']
 
     if not correct_answer:
-        correct_answer = choices[0].get('text', 'Option A') if choices else 'Option A'
+        if choices:
+            first_choice = choices[0]
+            if isinstance(first_choice, dict):
+                correct_answer = first_choice.get('text', 'Option A')
+            else:
+                correct_answer = str(first_choice) if first_choice is not None else 'Option A'
+        else:
+            correct_answer = 'Option A'
 
     # Escape XML special characters to prevent malformed XML
     def escape_xml(text):
