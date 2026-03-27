@@ -78,6 +78,82 @@ class TestOpenedXCourseViewSet:
         assert resp.status_code == 200
         assert resp.data["called"] == "create_course_structure_logic"
 
+    def test_create_structure_async_enqueues_job(self, api_factory):
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "create_structure_async"})
+        req = api_factory.post(
+            "/owly-courses/structure/async/",
+            {
+                "course_id": "course-v1:ORG+NUM+RUN",
+                "units_config": {"units": [{"name": "Week 1"}]},
+                "edit": True,
+            },
+            format="json",
+        )
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 202
+        assert resp.data["success"] is True
+        assert resp.data["status"] == "pending"
+        assert resp.data["course_id"] == "course-v1:ORG+NUM+RUN"
+        assert resp.data["edit_mode"] is True
+        assert resp.data["job_id"]
+
+    def test_create_structure_async_rejects_invalid_payload(self, api_factory):
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "create_structure_async"})
+        req = api_factory.post(
+            "/owly-courses/structure/async/",
+            {
+                "course_id": "course-v1:ORG+NUM+RUN",
+                "units_config": {"sections": [{"display_name": "Week 1"}]},
+            },
+            format="json",
+        )
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 400
+        assert resp.data["success"] is False
+        assert resp.data["error"] == "invalid_units_config"
+
+    def test_get_structure_job_returns_cached_job(self, api_factory):
+        from openedx_owly_apis.course_structure_jobs import create_course_structure_job, update_course_structure_job
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
+
+        job = create_course_structure_job(
+            course_id="course-v1:ORG+NUM+RUN",
+            edit=True,
+            user_identifier=1,
+        )
+        update_course_structure_job(
+            job["job_id"],
+            status="success",
+            result={"success": True, "created_structure": []},
+        )
+
+        view = OpenedXCourseViewSet.as_view({"get": "get_structure_job"})
+        req = api_factory.get(f"/owly-courses/structure/jobs/{job['job_id']}/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, job_id=job["job_id"])
+        assert resp.status_code == 200
+        assert resp.data["job_id"] == job["job_id"]
+        assert resp.data["status"] == "success"
+        assert resp.data["success"] is True
+
+    def test_get_structure_job_returns_404_for_missing_job(self, api_factory):
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
+
+        view = OpenedXCourseViewSet.as_view({"get": "get_structure_job"})
+        req = api_factory.get("/owly-courses/structure/jobs/missing-job/")
+        user = _auth_user()
+        force_authenticate(req, user=user)
+        resp = view(req, job_id="missing-job")
+        assert resp.status_code == 404
+        assert resp.data["error"] == "job_not_found"
+
     def test_add_html_content_calls_logic(self, api_factory):
         from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "add_html_content"})

@@ -7,6 +7,7 @@ full Open edX platform during tests.
 
 import sys
 import types
+from types import SimpleNamespace
 
 import pytest
 
@@ -166,6 +167,17 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_courses.list_grades_logic = _simple_ret("list_grades_logic")
     sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
     stubs.append("openedx_owly_apis.operations.courses")
+
+    tasks_mod = types.ModuleType("openedx_owly_apis.tasks")
+
+    class _AsyncTaskStub:
+        @staticmethod
+        def delay(*args, **kwargs):  # pylint: disable=unused-argument
+            return SimpleNamespace(id="stub-task-id")
+
+    tasks_mod.create_course_structure_task = _AsyncTaskStub()
+    sys.modules["openedx_owly_apis.tasks"] = tasks_mod
+    stubs.append("openedx_owly_apis.tasks")
 
     ops_analytics = types.ModuleType("openedx_owly_apis.operations.analytics")
 

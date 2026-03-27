@@ -13,7 +13,15 @@ from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import status
 
+from openedx_owly_apis.course_structure_jobs import (
+    create_course_structure_job,
+    get_course_structure_job,
+    update_course_structure_job,
+)
+from openedx_owly_apis.operations.course_structure_validation import validate_course_structure_payload
+from openedx_owly_apis.tasks import create_course_structure_task
 # Importar funciones lógicas originales
 from openedx_owly_apis.operations.courses import (
     add_discussion_content_logic,
@@ -94,6 +102,86 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
         return Response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='structure/async',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
+    )
+    def create_structure_async(self, request):
+        """Enqueue course structure creation and return a cache-backed job id."""
+        data = request.data
+        course_id = data.get('course_id')
+        units_config = data.get('units_config')
+        edit = data.get('edit', False)
+
+        if not course_id:
+            return Response(
+                {
+                    "success": False,
+                    "error": "missing_course_id",
+                    "message": "course_id is required",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        validation_error = validate_course_structure_payload(units_config)
+        if validation_error:
+            validation_error["course_id"] = course_id
+            return Response(validation_error, status=status.HTTP_400_BAD_REQUEST)
+
+        job = create_course_structure_job(
+            course_id=course_id,
+            edit=edit,
+            user_identifier=request.user.id,
+        )
+
+        async_result = create_course_structure_task.delay(
+            job["job_id"],
+            course_id,
+            units_config,
+            edit,
+            request.user.id,
+        )
+        update_course_structure_job(job["job_id"], task_id=async_result.id)
+
+        return Response(
+            {
+                "success": True,
+                "job_id": job["job_id"],
+                "status": "pending",
+                "course_id": course_id,
+                "edit_mode": bool(edit),
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path=r'structure/jobs/(?P<job_id>[^/.]+)',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
+    )
+    def get_structure_job(self, request, job_id=None):
+        """Return the current status for an async course structure job."""
+        job = get_course_structure_job(job_id)
+        if not job:
+            return Response(
+                {
+                    "success": False,
+                    "error": "job_not_found",
+                    "job_id": job_id,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            {
+                "success": job.get("status") == "success",
+                **job,
+            }
+        )
 
     @action(
         detail=False,
