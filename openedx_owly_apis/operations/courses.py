@@ -20,7 +20,10 @@ from openedx.core.djangoapps.enrollments.data import get_course_enrollment_info
 from xmodule.modulestore import ModuleStoreEnum
 from xmodule.modulestore.exceptions import DuplicateCourseError
 
-from openedx_owly_apis.operations.course_structure_validation import validate_course_structure_payload
+from openedx_owly_apis.operations.course_structure_validation import (
+    normalize_course_structure_payload,
+    validate_course_structure_payload,
+)
 
 # Imports necesarios - lazy import to avoid SearchAccess model conflict
 # from cms.djangoapps.contentstore.views.course import create_new_course_in_store
@@ -728,7 +731,7 @@ def sync_xblock_structure(parent, store, acting_user, category, desired_items, e
     items_to_update = []
 
     # Primero, recolectar todos los items que necesitan actualización
-    for desired_item in desired_items:
+    for desired_item in desired_items or []:
         name = desired_item['name']
         existing = find_existing_by_name_or_number(name, parent.children)
 
@@ -807,6 +810,7 @@ def create_course_structure_logic(course_id: str, units_config: dict, edit: bool
             )
             validation_error["course_id"] = course_id
             return validation_error
+        units_config = normalize_course_structure_payload(units_config)
 
         logger.info(
             "create_course_structure start course_id=%s edit=%s acting_user=%s units_top=%s",
@@ -3405,7 +3409,7 @@ def add_ora_content_logic(vertical_id: str, ora_config: dict, user_identifier=No
             component.rubric_criteria = _build_ora_rubric(rubric_config)
 
         # Configure assessments workflow
-        assessments_config = ora_config.get('assessments', [])
+        assessments_config = ora_config.get('assessments') or []
         if assessments_config:
             component.rubric_assessments = _build_ora_assessments(assessments_config)
         else:
@@ -3483,14 +3487,14 @@ def _build_ora_rubric(rubric_config):
     """
     criteria = []
 
-    for criterion in rubric_config.get('criteria', []):
+    for criterion in rubric_config.get('criteria') or []:
         criterion_data = {
             "name": criterion.get('name', 'Criterion'),
             "prompt": criterion.get('prompt', 'Evaluate this criterion'),
             "options": []
         }
 
-        for option in criterion.get('options', []):
+        for option in criterion.get('options') or []:
             option_data = {
                 "name": option.get('name', 'Option'),
                 "points": option.get('points', 1),
@@ -3913,7 +3917,7 @@ def grade_ora_content_logic(
             answer = submission.get('answer', {})
             if isinstance(answer, dict):
                 # Extract text parts
-                parts = answer.get('parts', [])
+                parts = answer.get('parts') or []
                 if parts:
                     text_responses = []
                     file_uploads = []
@@ -3988,7 +3992,7 @@ def grade_ora_content_logic(
                 if attr_value:
                     if attr_name == 'rubric' and isinstance(attr_value, dict):
                         # This should be the main rubric with criteria
-                        rubric_criteria = attr_value.get('criteria', [])
+                        rubric_criteria = attr_value.get('criteria') or []
                         logger.info(f"Found rubric criteria in 'rubric' attribute: {rubric_criteria}")
                         break
                     elif attr_name == 'rubric_criteria':
@@ -4005,14 +4009,14 @@ def grade_ora_content_logic(
                     rubric_field = ora_xblock.fields['rubric']
                     logger.info(f"Found rubric field: {rubric_field}")
                     if hasattr(rubric_field, 'default') and isinstance(rubric_field.default, dict):
-                        rubric_criteria = rubric_field.default.get('criteria', [])
+                        rubric_criteria = rubric_field.default.get('criteria') or []
 
                 # Alternative: try to get the definition data
                 if not rubric_criteria and hasattr(ora_xblock, 'definition_data'):
                     definition = ora_xblock.definition_data
                     logger.info(f"Checking definition_data: {definition}")
                     if isinstance(definition, dict) and 'rubric' in definition:
-                        rubric_criteria = definition['rubric'].get('criteria', [])
+                        rubric_criteria = definition['rubric'].get('criteria') or []
 
             logger.info(f"Creating staff assessment for submission {submission_uuid}")
             logger.info(f"Final extracted rubric criteria: {rubric_criteria}")
@@ -4259,7 +4263,7 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
             for attr in ('rubric_criteria', 'rubric_criteria_with_labels'):
                 data = getattr(xblock, attr, None)
                 if data:
-                    return data if isinstance(data, list) else data.get('criteria', [])
+                    return data if isinstance(data, list) else (data.get('criteria') or [])
 
             # Method-based accessor
             get_rubric = getattr(xblock, 'get_rubric', None)
@@ -4267,7 +4271,7 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
                 try:
                     rubric_dict = get_rubric()
                     if isinstance(rubric_dict, dict):
-                        crit = rubric_dict.get('criteria', [])
+                        crit = rubric_dict.get('criteria') or []
                         if crit:
                             return crit
                 except Exception as err:
@@ -4276,7 +4280,7 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
             # Fallback attributes
             data = getattr(xblock, 'rubric', None)
             if isinstance(data, dict):
-                return data.get('criteria', [])
+                return data.get('criteria') or []
             if isinstance(data, list):
                 return data
 
@@ -4333,7 +4337,7 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
                 name = criterion.get('name')
                 prompt = criterion.get('prompt')
                 order_num = criterion.get('order_num')
-                options = criterion.get('options', [])
+                options = criterion.get('options') or []
             else:
                 name = getattr(criterion, 'name', None)
                 prompt = getattr(criterion, 'prompt', None)

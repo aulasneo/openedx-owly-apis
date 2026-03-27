@@ -1,4 +1,7 @@
-from openedx_owly_apis.operations.course_structure_validation import validate_course_structure_payload
+from openedx_owly_apis.operations.course_structure_validation import (
+    normalize_course_structure_payload,
+    validate_course_structure_payload,
+)
 
 
 def test_create_course_structure_validation_rejects_sections_shape():
@@ -39,6 +42,30 @@ def test_create_course_structure_validation_accepts_supported_shape():
     assert result is None
 
 
+def test_create_course_structure_validation_accepts_null_optional_nested_lists():
+    result = validate_course_structure_payload(
+        {
+            "units": [
+                {
+                    "name": "Week 1",
+                    "subsections_list": [
+                        {
+                            "name": "Introduction",
+                            "verticals_list": None,
+                        }
+                    ],
+                },
+                {
+                    "name": "Week 2",
+                    "subsections_list": None,
+                },
+            ]
+        }
+    )
+
+    assert result is None
+
+
 def test_create_course_structure_validation_requires_names():
     result = validate_course_structure_payload(
         {
@@ -60,3 +87,34 @@ def test_create_course_structure_validation_requires_names():
     assert result["success"] is False
     assert result["error"] == "invalid_units_config"
     assert "name is required" in result["message"]
+
+
+def test_normalize_course_structure_payload_coerces_null_nested_lists_to_empty_lists():
+    payload = {
+        "units": [
+            {
+                "name": "Week 1",
+                "subsections_list": [
+                    {
+                        "name": "Introduction",
+                        "verticals_list": None,
+                    }
+                ],
+            },
+            {
+                "name": "Week 2",
+                "subsections_list": None,
+            },
+            {
+                "name": "Week 3",
+            },
+        ]
+    }
+
+    normalized = normalize_course_structure_payload(payload)
+
+    assert normalized["units"][0]["subsections_list"][0]["verticals_list"] == []
+    assert normalized["units"][1]["subsections_list"] == []
+    assert "subsections_list" not in normalized["units"][2]
+    assert payload["units"][0]["subsections_list"][0]["verticals_list"] is None
+    assert payload["units"][1]["subsections_list"] is None
