@@ -126,13 +126,13 @@ if sys.argv[-1] == 'tag':
     sys.exit()
 
 README = open(os.path.join(os.path.dirname(__file__), 'README.rst'), encoding="utf8").read()
-CHANGELOG = open(os.path.join(os.path.dirname(__file__), 'CHANGELOG.rst'), encoding="utf8").read()
+CHANGELOG = open(os.path.join(os.path.dirname(__file__), 'CHANGELOG.md'), encoding="utf8").read()
 
 setup(
     name='openedx-owly-apis',
     version=VERSION,
     description="Extra Open edX REST APIs for analytics, course management, and grading.",
-    long_description=README + '\n\n' + CHANGELOG,
+    long_description=README,
     long_description_content_type='text/x-rst',
     author='lberoes@aulasneo.com',
     author_email='lberoes@aulasneo.com',
