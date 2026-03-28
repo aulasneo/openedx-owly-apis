@@ -40,15 +40,15 @@ def validate_course_structure_payload(units_config):
         return {
             "success": False,
             "error": "invalid_units_config",
-            "message": "units_config must be an object with a non-empty 'units' list",
+            "message": "units_config must be an object with a 'units' list",
         }
 
     units = units_config.get("units")
-    if not isinstance(units, list) or not units:
+    if not isinstance(units, list):
         return {
             "success": False,
             "error": "invalid_units_config",
-            "message": "units_config.units must be a non-empty list",
+            "message": "units_config.units must be a list",
         }
 
     for unit_index, unit in enumerate(units):

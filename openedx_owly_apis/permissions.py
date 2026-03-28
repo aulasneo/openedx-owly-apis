@@ -1,10 +1,11 @@
 """
 Custom DRF permissions for Open edX roles.
 
-- IsCourseCreator: requiere que el usuario sea creador de cursos (global u org)
-- IsCourseStaff: requiere que el usuario sea staff del curso
+- IsCourseCreator: requires the user to be a global or org-scoped course creator
+- IsCourseStaff: requires the user to be course staff for the relevant course
 
-Se intenta resolver el contexto (curso/org) desde query params o body.
+The permission helpers infer course and organization context from query parameters
+or the request body when possible.
 """
 from typing import Optional
 
@@ -15,7 +16,7 @@ from rest_framework.permissions import BasePermission
 
 
 def _get_course_key_from_request(request) -> Optional[CourseKey]:
-    """Extrae CourseKey desde course_id o vertical_id en query/body."""
+    """Extract a ``CourseKey`` from ``course_id`` or block identifiers in the request."""
     course_id = request.query_params.get("course_id") or request.data.get("course_id")
     if course_id:
         try:
@@ -43,13 +44,42 @@ def _get_course_key_from_request(request) -> Optional[CourseKey]:
 
 
 def _get_org_from_request(request, fallback_course_key: Optional[CourseKey]) -> Optional[str]:
-    """Obtiene org de query/body o del course_key si está disponible."""
+    """Extract the organization from the request or fall back to the course key."""
     org = request.query_params.get("org") or request.data.get("org")
     if org:
         return org
     if fallback_course_key is not None:
         return getattr(fallback_course_key, "org", None)
     return None
+
+
+def is_admin_user(user) -> bool:
+    """Return whether the user is a site-level Open edX admin."""
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and (getattr(user, "is_superuser", False) or getattr(user, "is_staff", False))
+    )
+
+
+def is_course_creator_user(user, org: Optional[str] = None) -> bool:
+    """Return whether the user is a global or org-scoped course creator."""
+    if not getattr(user, "is_authenticated", False):
+        return False
+
+    if user_has_role(user, CourseCreatorRole()):
+        return True
+
+    if org:
+        return user_has_role(user, OrgContentCreatorRole(org=org))
+
+    return False
+
+
+def is_course_staff_user(user, course_key: Optional[CourseKey]) -> bool:
+    """Return whether the user is course staff for the given course."""
+    if not getattr(user, "is_authenticated", False) or course_key is None:
+        return False
+    return CourseStaffRole(course_key).has_user(user)
 
 
 class IsCourseCreator(BasePermission):
@@ -91,7 +121,7 @@ class IsCourseStaff(BasePermission):
 
 
 class IsAdminOrCourseCreator(BasePermission):
-    """Permite acceso a admin (superuser o staff) o a Course Creator."""
+    """Allow access to site admins or course creators."""
 
     message = "User must be admin or Course Creator"
 
@@ -109,7 +139,7 @@ class IsAdminOrCourseCreator(BasePermission):
 
 
 class IsAdminOrCourseStaff(BasePermission):
-    """Permite acceso a admin (superuser o staff) o a Course Staff del curso específico."""
+    """Allow access to site admins or course staff for the resolved course."""
 
     message = "User must be admin or Course Staff"
 
@@ -127,7 +157,7 @@ class IsAdminOrCourseStaff(BasePermission):
 
 
 class IsAdminOrCourseCreatorOrCourseStaff(BasePermission):
-    """Permite acceso a admin, Course Creator o Course Staff (instructor/staff/limited)."""
+    """Allow access to site admins, course creators, or course staff."""
 
     message = "User must be admin, Course Creator or Course Staff"
 

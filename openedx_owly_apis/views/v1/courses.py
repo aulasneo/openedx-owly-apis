@@ -1,27 +1,20 @@
-"""
-OpenedX Course Management ViewSet
-ViewSet simple que mapea directamente las funciones de lógica existentes
-"""
-import json
+"""OpenedX course management v1 APIs with explicit request contracts."""
 
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
+from opaque_keys.edx.keys import CourseKey
 from openedx.core.lib.api.authentication import BearerAuthentication
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
 
 from openedx_owly_apis.course_structure_jobs import (
     create_course_structure_job,
     get_course_structure_job,
     update_course_structure_job,
 )
-from openedx_owly_apis.operations.course_structure_validation import validate_course_structure_payload
-from openedx_owly_apis.tasks import create_course_structure_task
 # Importar funciones lógicas originales
 from openedx_owly_apis.operations.courses import (
     add_discussion_content_logic,
@@ -45,14 +38,54 @@ from openedx_owly_apis.permissions import (
     IsAdminOrCourseCreator,
     IsAdminOrCourseCreatorOrCourseStaff,
     IsAdminOrCourseStaff,
+    is_admin_user,
+    is_course_creator_user,
+    is_course_staff_user,
+)
+from openedx_owly_apis.tasks import create_course_structure_task
+from openedx_owly_apis.views.v1.response_utils import (
+    error_response,
+    logic_result_response,
+    serializer_error_response,
+    success_response,
+)
+from openedx_owly_apis.views.v1.serializers import (
+    BulkEmailRequestSerializer,
+    CohortMemberActionRequestSerializer,
+    CohortMembersQuerySerializer,
+    ConfigureCertificatesRequestSerializer,
+    ControlUnitAvailabilityRequestSerializer,
+    CourseIdQuerySerializer,
+    CourseStructureRequestSerializer,
+    CourseTreeQuerySerializer,
+    CreateCohortRequestSerializer,
+    CreateCourseRequestSerializer,
+    CreateProblemComponentRequestSerializer,
+    DeleteCohortQuerySerializer,
+    DeleteXBlockRequestSerializer,
+    DiscussionContentRequestSerializer,
+    HtmlContentRequestSerializer,
+    ListCourseStaffQuerySerializer,
+    ManageCourseStaffRequestSerializer,
+    OraContentRequestSerializer,
+    OraGradeRequestSerializer,
+    OraLocationQuerySerializer,
+    ProblemContentRequestSerializer,
+    PublishContentRequestSerializer,
+    UnitContentsQuerySerializer,
+    UpdateAdvancedSettingsRequestSerializer,
+    UpdateCourseSettingsRequestSerializer,
+    VideoContentRequestSerializer,
 )
 
 
 @method_decorator(transaction.non_atomic_requests, name='dispatch')
 class OpenedXCourseViewSet(viewsets.ViewSet):
     """
-    ViewSet para gestión de cursos OpenedX - mapeo directo de funciones MCP
-    Requiere autenticación y permisos de administrador
+    Course management endpoints for Open edX.
+
+    Authentication is required for all actions. Individual endpoints declare the
+    minimum additional permission checks needed for the underlying operation.
     """
     authentication_classes = (
         JwtAuthentication,
@@ -61,6 +94,36 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     permission_classes = [IsAuthenticated]
 
+    @staticmethod
+    def _validated(serializer_class, *, data=None, context=None):
+        serializer = serializer_class(data=data, context=context or {})
+        if not serializer.is_valid():
+            return None, serializer_error_response(serializer)
+        return serializer.validated_data, None
+
+    @staticmethod
+    def _can_access_structure_job(user, job):
+        if is_admin_user(user):
+            return True
+
+        requested_by = str(job.get("requested_by")) if job.get("requested_by") is not None else None
+        if requested_by and requested_by == str(user.id):
+            return True
+
+        course_id = job.get("course_id")
+        if not course_id:
+            return False
+
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception:  # pylint: disable=broad-except
+            return False
+
+        return (
+            is_course_staff_user(user, course_key)
+            or is_course_creator_user(user, getattr(course_key, "org", None))
+        )
+
     @action(
         detail=False,
         methods=['post'],
@@ -68,11 +131,9 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         permission_classes=[IsAuthenticated, IsAdminOrCourseCreator],
     )
     def create_course(self, request):
-        """
-        Crear un nuevo curso OpenedX
-        Mapea directamente a create_course_logic()
-        """
-        data = request.data
+        data, error = self._validated(CreateCourseRequestSerializer, data=request.data)
+        if error:
+            return error
         result = create_course_logic(
             org=data.get('org'),
             course_number=data.get('course_number'),
@@ -81,7 +142,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             start_date=data.get('start_date'),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result, success_status=status.HTTP_201_CREATED)
 
     @action(
         detail=False,
@@ -90,18 +151,16 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
     )
     def create_structure(self, request):
-        """
-        Crear/editar estructura del curso
-        Mapea directamente a create_course_structure_logic()
-        """
-        data = request.data
+        data, error = self._validated(CourseStructureRequestSerializer, data=request.data)
+        if error:
+            return error
         result = create_course_structure_logic(
             course_id=data.get('course_id'),
             units_config=data.get('units_config'),
             edit=data.get('edit', False),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -111,25 +170,13 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def create_structure_async(self, request):
         """Enqueue course structure creation and return a cache-backed job id."""
-        data = request.data
-        course_id = data.get('course_id')
-        units_config = data.get('units_config')
-        edit = data.get('edit', False)
+        data, error = self._validated(CourseStructureRequestSerializer, data=request.data)
+        if error:
+            return error
 
-        if not course_id:
-            return Response(
-                {
-                    "success": False,
-                    "error": "missing_course_id",
-                    "message": "course_id is required",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        validation_error = validate_course_structure_payload(units_config)
-        if validation_error:
-            validation_error["course_id"] = course_id
-            return Response(validation_error, status=status.HTTP_400_BAD_REQUEST)
+        course_id = data["course_id"]
+        units_config = data["units_config"]
+        edit = data["edit"]
 
         job = create_course_structure_job(
             course_id=course_id,
@@ -146,15 +193,14 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         )
         update_course_structure_job(job["job_id"], task_id=async_result.id)
 
-        return Response(
+        return success_response(
             {
-                "success": True,
                 "job_id": job["job_id"],
                 "status": "pending",
                 "course_id": course_id,
                 "edit_mode": bool(edit),
             },
-            status=status.HTTP_202_ACCEPTED,
+            http_status=status.HTTP_202_ACCEPTED,
         )
 
     @action(
@@ -167,19 +213,35 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         """Return the current status for an async course structure job."""
         job = get_course_structure_job(job_id)
         if not job:
-            return Response(
-                {
-                    "success": False,
-                    "error": "job_not_found",
-                    "job_id": job_id,
-                },
-                status=status.HTTP_404_NOT_FOUND,
+            return error_response(
+                "Async course structure job not found",
+                "job_not_found",
+                details={"job_id": job_id},
+                http_status=status.HTTP_404_NOT_FOUND,
             )
 
-        return Response(
+        if not self._can_access_structure_job(request.user, job):
+            return error_response(
+                "You do not have access to this async course structure job",
+                "job_access_denied",
+                details={"job_id": job_id},
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return success_response(
             {
-                "success": job.get("status") == "success",
-                **job,
+                "job_id": job["job_id"],
+                "status": job.get("status"),
+                "course_id": job.get("course_id"),
+                "edit_mode": job.get("edit_mode"),
+                "requested_by": job.get("requested_by"),
+                "task_id": job.get("task_id"),
+                "created_at": job.get("created_at"),
+                "updated_at": job.get("updated_at"),
+                "progress_message": job.get("progress_message"),
+                "result": job.get("result"),
+                "error": job.get("error"),
+                "completed_at": job.get("completed_at"),
             }
         )
 
@@ -261,50 +323,27 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
                     "search_count": 1  // Only present when search parameters are used
                 }
         """
-        course_id = request.query_params.get('course_id')
-        starting_block_id = request.query_params.get('starting_block_id')
-        depth = request.query_params.get('depth')
-        search_id = request.query_params.get('search_id')
-        search_type = request.query_params.get('search_type')
-        search_name = request.query_params.get('search_name')
-
-        if not course_id:
-            return Response({
-                'success': False,
-                'error': 'course_id parameter is required',
-                'error_code': 'missing_course_id'
-            }, status=400)
-
-        # Convert depth to int if provided
-        if depth:
-            try:
-                depth = int(depth)
-            except (ValueError, TypeError):
-                return Response({
-                    'success': False,
-                    'error': 'depth must be a valid integer',
-                    'error_code': 'invalid_depth'
-                }, status=400)
+        data, error = self._validated(CourseTreeQuerySerializer, data=request.query_params)
+        if error:
+            return error
 
         result = get_course_tree_logic(
-            course_id=course_id,
-            starting_block_id=starting_block_id,
-            depth=depth,
-            search_id=search_id,
-            search_type=search_type,
-            search_name=search_name,
+            course_id=data.get('course_id'),
+            starting_block_id=data.get('starting_block_id'),
+            depth=data.get('depth'),
+            search_id=data.get('search_id'),
+            search_type=data.get('search_type'),
+            search_name=data.get('search_name'),
             user_identifier=request.user.id
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     @action(
         detail=False,
         methods=['get'],
         url_path='unit/contents',
-        # permission_classes=[AllowAny],
-        permission_classes=[IsAuthenticated]
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff]
     )
     def get_unit_contents(self, request):
         """
@@ -317,31 +356,17 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         Returns:
             JSON with children entries including id, type, display_name, and content payload per block type.
         """
-        course_id = request.query_params.get('course_id')
-        vertical_id = request.query_params.get('vertical_id')
-
-        if not course_id:
-            return Response({
-                'success': False,
-                'error': 'course_id parameter is required',
-                'error_code': 'missing_course_id'
-            }, status=400)
-
-        if not vertical_id:
-            return Response({
-                'success': False,
-                'error': 'vertical_id parameter is required',
-                'error_code': 'missing_vertical_id'
-            }, status=400)
+        data, error = self._validated(UnitContentsQuerySerializer, data=request.query_params)
+        if error:
+            return error
 
         result = get_vertical_contents_logic(
-            course_id=course_id,
-            vertical_id=vertical_id,
+            course_id=data.get('course_id'),
+            vertical_id=data.get('vertical_id'),
             user_identifier=request.user.id,
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -351,16 +376,17 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def add_html_content(self, request):
         """
-        Añadir contenido HTML a un vertical
-        Mapea directamente a add_html_content_logic()
+        Add an HTML component to a vertical.
         """
-        data = request.data
+        data, error = self._validated(HtmlContentRequestSerializer, data=request.data)
+        if error:
+            return error
         result = add_html_content_logic(
             vertical_id=data.get('vertical_id'),
             html_config=data.get('html_config'),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -370,16 +396,17 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def add_video_content(self, request):
         """
-        Añadir contenido de video a un vertical
-        Mapea directamente a add_video_content_logic()
+        Add a video component to a vertical.
         """
-        data = request.data
+        data, error = self._validated(VideoContentRequestSerializer, data=request.data)
+        if error:
+            return error
         result = add_video_content_logic(
             vertical_id=data.get('vertical_id'),
             video_config=data.get('video_config'),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -389,16 +416,17 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def add_problem_content(self, request):
         """
-        Añadir problema (XML/edx) a un vertical
-        Mapea directamente a add_problem_content_logic()
+        Add a raw problem component to a vertical.
         """
-        data = request.data
+        data, error = self._validated(ProblemContentRequestSerializer, data=request.data)
+        if error:
+            return error
         result = add_problem_content_logic(
             vertical_id=data.get('vertical_id'),
             problem_config=data.get('problem_config'),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -408,16 +436,17 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def add_discussion_content(self, request):
         """
-        Añadir foros de discusión a un vertical
-        Mapea directamente a add_discussion_content_logic()
+        Add a discussion component to a vertical.
         """
-        data = request.data
+        data, error = self._validated(DiscussionContentRequestSerializer, data=request.data)
+        if error:
+            return error
         result = add_discussion_content_logic(
             vertical_id=data.get('vertical_id'),
             discussion_config=data.get('discussion_config'),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -427,16 +456,17 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def update_settings(self, request):
         """
-        Actualizar configuraciones del curso (fechas, detalles, etc.)
-        Mapea directamente a update_course_settings_logic()
+        Update general course settings such as dates and metadata.
         """
-        data = request.data
+        data, error = self._validated(UpdateCourseSettingsRequestSerializer, data=request.data)
+        if error:
+            return error
         result = update_course_settings_logic(
             course_id=data.get('course_id'),
             settings_data=data.get('settings_data', {}),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -446,16 +476,17 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def update_advanced_settings(self, request):
         """
-        Actualizar configuraciones avanzadas del curso (other_course_settings)
-        Mapea directamente a update_advanced_settings_logic()
+        Update advanced course settings stored in ``other_course_settings``.
         """
-        data = request.data
+        data, error = self._validated(UpdateAdvancedSettingsRequestSerializer, data=request.data)
+        if error:
+            return error
         result = update_advanced_settings_logic(
             course_id=data.get('course_id'),
             advanced_settings=data.get('advanced_settings', {}),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -466,10 +497,13 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     def configure_certificates(self, request):
         """
         Configure certificates for a course.
-        For activation/deactivation, ONLY course_id and is_active are required (no certificate_id).
-        For configuration, use certificate_config.
+
+        Use ``course_id`` and ``is_active`` to toggle certificates on or off.
+        Use ``certificate_config`` to update certificate settings.
         """
-        data = request.data
+        data, error = self._validated(ConfigureCertificatesRequestSerializer, data=request.data)
+        if error:
+            return error
         # Activar/desactivar certificado (solo course_id + is_active)
         if 'is_active' in data:
             # pylint: disable=import-outside-toplevel
@@ -486,7 +520,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
                 certificate_config=data.get('certificate_config', {}),
                 user_identifier=request.user.id
             )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -495,14 +529,16 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
     )
     def control_unit_availability(self, request):
-        """Control unit availability and due dates"""
-        data = request.data
+        """Update availability and due date settings for a unit."""
+        data, error = self._validated(ControlUnitAvailabilityRequestSerializer, data=request.data)
+        if error:
+            return error
         result = control_unit_availability_logic(
             unit_id=data.get('unit_id'),
             availability_config=data.get('availability_config', {}),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -511,8 +547,10 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         permission_classes=[IsAuthenticated, IsAdminOrCourseCreatorOrCourseStaff],
     )
     def create_problem(self, request):
-        """Create a problem component in an OpenEdX course unit"""
-        data = request.data
+        """Create a structured problem component inside a course unit."""
+        data, error = self._validated(CreateProblemComponentRequestSerializer, data=request.data)
+        if error:
+            return error
         result = create_openedx_problem_logic(
             unit_locator=data.get('unit_locator'),
             problem_type=data.get('problem_type', 'multiplechoiceresponse'),
@@ -520,7 +558,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             problem_data=data.get('problem_data', {}),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result, success_status=status.HTTP_201_CREATED)
 
     @action(
         detail=False,
@@ -529,14 +567,16 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
     )
     def publish_content(self, request):
-        """Publish course content (courses, units, subsections, sections)"""
-        data = request.data
+        """Publish course content such as courses, sections, subsections, or units."""
+        data, error = self._validated(PublishContentRequestSerializer, data=request.data)
+        if error:
+            return error
         result = publish_content_logic(
             content_id=data.get('content_id'),
             publish_type=data.get('publish_type', 'auto'),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -546,15 +586,16 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def delete_xblock(self, request):
         """
-        Delete an xblock component from a course
-        Mapped to delete_xblock_logic()
+        Delete an XBlock component from a course.
         """
-        data = request.data
+        data, error = self._validated(DeleteXBlockRequestSerializer, data=request.data)
+        if error:
+            return error
         result = delete_xblock_logic(
             block_id=data.get('block_id'),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -581,7 +622,9 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         """
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import manage_course_staff_logic
-        data = request.data
+        data, error = self._validated(ManageCourseStaffRequestSerializer, data=request.data)
+        if error:
+            return error
         result = manage_course_staff_logic(
             course_id=data.get('course_id'),
             user_identifier=data.get('user_identifier'),
@@ -589,7 +632,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             role_type=data.get('role_type', 'staff'),
             acting_user_identifier=request.user.username
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -616,15 +659,16 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import list_course_staff_logic
 
-        course_id = request.query_params.get('course_id')
-        role_type = request.query_params.get('role_type')
+        data, error = self._validated(ListCourseStaffQuerySerializer, data=request.query_params)
+        if error:
+            return error
 
         result = list_course_staff_logic(
-            course_id=course_id,
-            role_type=role_type,
+            course_id=data.get('course_id'),
+            role_type=data.get('role_type'),
             acting_user_identifier=request.user.username
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -634,39 +678,40 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
     )
     def add_ora_content(self, request):
         """
-        Añadir Open Response Assessment (ORA) a un vertical.
+        Add an Open Response Assessment (ORA) component to a vertical.
 
-        ORAs permiten evaluaciones por pares, autoevaluaciones y evaluaciones por staff.
-        Mapea directamente a add_ora_content_logic()
+        ORA components support peer, self, and staff assessment workflows.
 
         Body parameters:
-            vertical_id (str): ID del vertical donde agregar el ORA
-            ora_config (dict): Configuración del ORA con:
+            vertical_id (str): Identifier of the target vertical
+            ora_config (dict): ORA configuration containing:
 
-                * display_name (str): Nombre del ORA
-                * prompt (str): Pregunta/prompt para los estudiantes
-                * rubric (dict): Configuración de la rúbrica de evaluación
-                * assessments (list): Tipos de evaluación (self, peer, staff)
-                * submission_start (str, optional): Inicio de entregas (ISO datetime)
-                * submission_due (str, optional): Fecha límite entregas (ISO datetime)
-                * allow_text_response (bool, optional): Permitir respuestas de texto
-                * allow_file_upload (bool, optional): Permitir subida de archivos
-                * file_upload_type (str, optional): 'image', 'pdf-and-image', etc.
-                * leaderboard_show (int, optional): Número de mejores entregas a mostrar
+                * display_name (str): ORA title
+                * prompt (str): Prompt shown to learners
+                * rubric (dict): Rubric definition
+                * assessments (list): Assessment types such as self, peer, or staff
+                * submission_start (str, optional): Submission start time (ISO datetime)
+                * submission_due (str, optional): Submission due time (ISO datetime)
+                * allow_text_response (bool, optional): Whether text submissions are allowed
+                * allow_file_upload (bool, optional): Whether file uploads are allowed
+                * file_upload_type (str, optional): Allowed upload type, for example ``image`` or ``pdf-and-image``
+                * leaderboard_show (int, optional): Number of top submissions to show
 
         Returns:
-            Response: JSON response con resultado de la operación
+            JSON response with the operation result.
         """
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import add_ora_content_logic
 
-        data = request.data
+        data, error = self._validated(OraContentRequestSerializer, data=request.data)
+        if error:
+            return error
         result = add_ora_content_logic(
             vertical_id=data.get('vertical_id'),
             ora_config=data.get('ora_config'),
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -741,7 +786,9 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import grade_ora_content_logic
 
-        data = request.data
+        data, error = self._validated(OraGradeRequestSerializer, data=request.data)
+        if error:
+            return error
 
         # Support both old format (grade_data) and new simplified format
         grade_data = data.get('grade_data', {})
@@ -761,9 +808,14 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             grade_data=grade_data,
             user_identifier=request.user.id
         )
-        return Response(result)
+        return logic_result_response(result)
 
-    @action(detail=False, methods=['get'], url_path='content/ora/details')
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='content/ora/details',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
     def get_ora_details(self, request):
         """
         Get detailed information about an ORA component including rubric structure.
@@ -816,24 +868,18 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             - NOT_ORA_XBLOCK: Component exists but isn't an ORA
             - PERMISSION_DENIED: User lacks access to view ORA details
         """
-        ora_location = request.query_params.get('ora_location')
-
-        if not ora_location:
-            return Response({
-                'success': False,
-                'error': 'ora_location parameter is required',
-                'error_code': 'missing_ora_location'
-            }, status=400)
+        data, error = self._validated(OraLocationQuerySerializer, data=request.query_params)
+        if error:
+            return error
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import get_ora_details_logic
 
         result = get_ora_details_logic(
-            ora_location=ora_location,
+            ora_location=data.get('ora_location'),
             user_identifier=request.user.id
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -882,25 +928,19 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             - SUBMISSIONS_RETRIEVAL_ERROR: Failed to retrieve submissions
             - PERMISSION_DENIED: User lacks access to view submissions
         """
-        ora_location = request.query_params.get('ora_location')
-
-        if not ora_location:
-            return Response({
-                'success': False,
-                'error': 'ora_location parameter is required',
-                'error_code': 'missing_ora_location'
-            }, status=400)
+        data, error = self._validated(OraLocationQuerySerializer, data=request.query_params)
+        if error:
+            return error
 
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import list_ora_submissions_logic
 
         result = list_ora_submissions_logic(
-            ora_location=ora_location,
+            ora_location=data.get('ora_location'),
             user_identifier=request.user.id
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     # =====================================
     # COHORT MANAGEMENT ENDPOINTS
@@ -938,7 +978,9 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import create_cohort_logic
 
-        data = request.data
+        data, error = self._validated(CreateCohortRequestSerializer, data=request.data)
+        if error:
+            return error
         result = create_cohort_logic(
             course_id=data.get('course_id'),
             cohort_name=data.get('cohort_name'),
@@ -946,8 +988,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -975,22 +1016,16 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import list_cohorts_logic
 
-        course_id = request.query_params.get('course_id')
-
-        if not course_id:
-            return Response({
-                'success': False,
-                'error': 'course_id parameter is required',
-                'error_code': 'missing_course_id'
-            }, status=400)
+        data, error = self._validated(CourseIdQuerySerializer, data=request.query_params)
+        if error:
+            return error
 
         result = list_cohorts_logic(
-            course_id=course_id,
+            course_id=data.get('course_id'),
             user_identifier=request.user.id
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -1024,7 +1059,9 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import add_user_to_cohort_logic
 
-        data = request.data
+        data, error = self._validated(CohortMemberActionRequestSerializer, data=request.data)
+        if error:
+            return error
         result = add_user_to_cohort_logic(
             course_id=data.get('course_id'),
             cohort_id=data.get('cohort_id'),
@@ -1032,8 +1069,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -1067,7 +1103,9 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import remove_user_from_cohort_logic
 
-        data = request.data
+        data, error = self._validated(CohortMemberActionRequestSerializer, data=request.data)
+        if error:
+            return error
         result = remove_user_from_cohort_logic(
             course_id=data.get('course_id'),
             cohort_id=data.get('cohort_id'),
@@ -1075,8 +1113,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -1105,41 +1142,21 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import list_cohort_members_logic
 
-        # Accept parameters from both query_params and data for test compatibility
-        course_id = request.query_params.get('course_id') or request.data.get('course_id')
-        cohort_id = request.query_params.get('cohort_id') or request.data.get('cohort_id')
-
-        if not course_id:
-            return Response({
-                'success': False,
-                'error': 'course_id parameter is required',
-                'error_code': 'missing_course_id'
-            }, status=400)
-
-        if not cohort_id:
-            return Response({
-                'success': False,
-                'error': 'cohort_id parameter is required',
-                'error_code': 'missing_cohort_id'
-            }, status=400)
-
-        try:
-            cohort_id = int(cohort_id)
-        except (ValueError, TypeError):
-            return Response({
-                'success': False,
-                'error': 'cohort_id must be a valid integer',
-                'error_code': 'invalid_cohort_id'
-            }, status=400)
+        merged_data = {
+            "course_id": request.query_params.get('course_id') or request.data.get('course_id'),
+            "cohort_id": request.query_params.get('cohort_id') or request.data.get('cohort_id'),
+        }
+        data, error = self._validated(CohortMembersQuerySerializer, data=merged_data)
+        if error:
+            return error
 
         result = list_cohort_members_logic(
-            course_id=course_id,
-            cohort_id=cohort_id,
+            course_id=data.get('course_id'),
+            cohort_id=data.get('cohort_id'),
             user_identifier=request.user.id
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -1171,41 +1188,21 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         # pylint: disable=import-outside-toplevel
         from openedx_owly_apis.operations.courses import delete_cohort_logic
 
-        # Accept parameters from both query_params and data for test compatibility
-        course_id = request.query_params.get('course_id') or request.data.get('course_id')
-        cohort_id = request.query_params.get('cohort_id') or request.data.get('cohort_id')
-
-        if not course_id:
-            return Response({
-                'success': False,
-                'error': 'course_id parameter is required',
-                'error_code': 'missing_course_id'
-            }, status=400)
-
-        if not cohort_id:
-            return Response({
-                'success': False,
-                'error': 'cohort_id parameter is required',
-                'error_code': 'missing_cohort_id'
-            }, status=400)
-
-        try:
-            cohort_id = int(cohort_id)
-        except (ValueError, TypeError):
-            return Response({
-                'success': False,
-                'error': 'cohort_id must be a valid integer',
-                'error_code': 'invalid_cohort_id'
-            }, status=400)
+        merged_data = {
+            "course_id": request.query_params.get('course_id') or request.data.get('course_id'),
+            "cohort_id": request.query_params.get('cohort_id') or request.data.get('cohort_id'),
+        }
+        data, error = self._validated(DeleteCohortQuerySerializer, data=merged_data)
+        if error:
+            return error
 
         result = delete_cohort_logic(
-            course_id=course_id,
-            cohort_id=cohort_id,
+            course_id=data.get('course_id'),
+            cohort_id=data.get('cohort_id'),
             user_identifier=request.user.id
         )
 
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)
 
     @action(
         detail=False,
@@ -1228,72 +1225,19 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             - from_addr (str): Optional custom email "from" address.
             - course_id (str): Course identifier (e.g., "course-v1:Org+Course+Run"). Required.
         """
-        data = request.data
-        course_id = data.get('course_id')
-        subject = data.get('subject')
-        message = data.get('body') or data.get('message')
-        targets = data.get('targets')
-        cohort_id = data.get('cohort_id')
-        schedule = data.get('schedule')
-        template_name = data.get('template_name')
-        from_addr = data.get('from_addr')
-
-        if not course_id:
-            return Response({
-                'success': False,
-                'error': 'course_id is required in body',
-                'error_code': 'missing_course_id'
-            }, status=400)
-
-        if not subject:
-            return Response({
-                'success': False,
-                'error': 'subject is required in body',
-                'error_code': 'missing_subject'
-            }, status=400)
-
-        if not message:
-            return Response({
-                'success': False,
-                'error': 'body is required in body',
-                'error_code': 'missing_body'
-            }, status=400)
-
-        # Normalize targets: accept list or JSON-stringified list
-        parsed_targets = None
-        if isinstance(targets, list):
-            parsed_targets = targets
-        elif isinstance(targets, str):
-            stripped = targets.strip()
-            if stripped.startswith('[') and stripped.endswith(']'):
-                try:
-                    parsed_targets = json.loads(stripped)
-                except json.JSONDecodeError:
-                    return Response({
-                        'success': False,
-                        'error': 'targets must be a valid JSON array or comma-separated string',
-                        'error_code': 'invalid_targets_format'
-                    }, status=400)
-            elif stripped:
-                # Allow comma-separated short form: "staff,learners"
-                parsed_targets = [t.strip() for t in stripped.split(',') if t.strip()]
-        elif targets is not None:
-            return Response({
-                'success': False,
-                'error': 'targets must be a list, JSON string, or comma-separated string',
-                'error_code': 'invalid_targets_format'
-            }, status=400)
+        data, error = self._validated(BulkEmailRequestSerializer, data=request.data)
+        if error:
+            return error
 
         result = send_bulk_email_logic(
-            course_id=course_id,
-            subject=subject,
-            body=message,
-            targets=parsed_targets,
-            cohort_id=cohort_id,
-            schedule=schedule,
-            template_name=template_name,
-            from_addr=from_addr,
+            course_id=data.get('course_id'),
+            subject=data.get('subject'),
+            body=data.get('body'),
+            targets=data.get('targets'),
+            cohort_id=data.get('cohort_id'),
+            schedule=data.get('schedule'),
+            template_name=data.get('template_name'),
+            from_addr=data.get('from_addr'),
             user_identifier=request.user.id,
         )
-        status_code = 200 if result.get('success') else 400
-        return Response(result, status=status_code)
+        return logic_result_response(result)

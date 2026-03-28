@@ -44,7 +44,7 @@ class TestOpenedXCourseViewSet:
         user = _auth_user()
         force_authenticate(req, user=user)
         resp = view(req)
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         body = resp.data
         assert body["called"] == "create_course_logic"
         # kwargs echo back from stubbed logic
@@ -116,7 +116,8 @@ class TestOpenedXCourseViewSet:
         resp = view(req)
         assert resp.status_code == 400
         assert resp.data["success"] is False
-        assert resp.data["error"] == "invalid_units_config"
+        assert resp.data["error_code"] == "validation_error"
+        assert "units_config" in resp.data["error_detail"]["details"]
 
     def test_get_structure_job_returns_cached_job(self, api_factory):
         from openedx_owly_apis.course_structure_jobs import create_course_structure_job, update_course_structure_job
@@ -152,7 +153,7 @@ class TestOpenedXCourseViewSet:
         force_authenticate(req, user=user)
         resp = view(req, job_id="missing-job")
         assert resp.status_code == 404
-        assert resp.data["error"] == "job_not_found"
+        assert resp.data["error_code"] == "job_not_found"
 
     def test_add_html_content_calls_logic(self, api_factory):
         from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
@@ -786,7 +787,8 @@ class TestOpenedXCourseViewSet:
         resp = view(req)
         assert resp.status_code == 400
         assert resp.data["success"] is False
-        assert resp.data["error_code"] == "missing_course_id"
+        assert resp.data["error_code"] == "validation_error"
+        assert "course_id" in resp.data["error_detail"]["details"]
 
     def test_add_user_to_cohort_calls_logic(self, api_factory):
         """Test adding a user to a specific cohort"""
@@ -927,7 +929,8 @@ class TestOpenedXCourseViewSet:
         force_authenticate(req1, user=user)
         resp1 = view(req1)
         assert resp1.status_code == 400
-        assert resp1.data["error_code"] == "missing_course_id"
+        assert resp1.data["error_code"] == "validation_error"
+        assert "course_id" in resp1.data["error_detail"]["details"]
 
         # Missing cohort_id
         req2 = api_factory.get(
@@ -937,7 +940,8 @@ class TestOpenedXCourseViewSet:
         force_authenticate(req2, user=user)
         resp2 = view(req2)
         assert resp2.status_code == 400
-        assert resp2.data["error_code"] == "missing_cohort_id"
+        assert resp2.data["error_code"] == "validation_error"
+        assert "cohort_id" in resp2.data["error_detail"]["details"]
 
     def test_list_cohort_members_invalid_cohort_id_returns_error(self, api_factory):
         """Test that invalid cohort_id format returns 400 error"""
@@ -954,7 +958,8 @@ class TestOpenedXCourseViewSet:
         force_authenticate(req, user=user)
         resp = view(req)
         assert resp.status_code == 400
-        assert resp.data["error_code"] == "invalid_cohort_id"
+        assert resp.data["error_code"] == "validation_error"
+        assert "cohort_id" in resp.data["error_detail"]["details"]
 
     def test_delete_cohort_calls_logic(self, api_factory):
         """Test deleting a cohort from a course"""
@@ -1008,7 +1013,8 @@ class TestOpenedXCourseViewSet:
         force_authenticate(req1, user=user)
         resp1 = view(req1)
         assert resp1.status_code == 400
-        assert resp1.data["error_code"] == "missing_course_id"
+        assert resp1.data["error_code"] == "validation_error"
+        assert "course_id" in resp1.data["error_detail"]["details"]
 
         # Missing cohort_id
         req2 = api_factory.delete(
@@ -1018,7 +1024,8 @@ class TestOpenedXCourseViewSet:
         force_authenticate(req2, user=user)
         resp2 = view(req2)
         assert resp2.status_code == 400
-        assert resp2.data["error_code"] == "missing_cohort_id"
+        assert resp2.data["error_code"] == "validation_error"
+        assert "cohort_id" in resp2.data["error_detail"]["details"]
 
     def test_delete_cohort_invalid_cohort_id_returns_error(self, api_factory):
         """Test that invalid cohort_id format for deletion returns 400 error"""
@@ -1035,7 +1042,8 @@ class TestOpenedXCourseViewSet:
         force_authenticate(req, user=user)
         resp = view(req)
         assert resp.status_code == 400
-        assert resp.data["error_code"] == "invalid_cohort_id"
+        assert resp.data["error_code"] == "validation_error"
+        assert "cohort_id" in resp.data["error_detail"]["details"]
 
     def test_cohort_management_comprehensive_workflow(self, api_factory):
         """Test a comprehensive workflow of cohort management operations"""
@@ -1135,14 +1143,14 @@ class TestOpenedXCourseViewSet:
                 "unit_locator": "block-v1:ORG+NUM+RUN+type@vertical+block@unit1",
                 "problem_type": "multiplechoiceresponse",
                 "display_name": "Test Problem",
-                "problem_data": {"question": "Test?"}
+                "problem_data": {"question_text": "Test?"}
             },
             format="json",
         )
         user = _auth_user(is_course_staff=True)
         force_authenticate(req, user=user)
         resp = view(req)
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         assert resp.data["called"] == "create_openedx_problem_logic"
         assert resp.data["kwargs"]["unit_locator"] == "block-v1:ORG+NUM+RUN+type@vertical+block@unit1"
 
@@ -1214,7 +1222,8 @@ class TestOpenedXCourseViewSet:
         resp = view(req)
         assert resp.status_code == 400
         assert resp.data["success"] is False
-        assert resp.data["error_code"] == "missing_ora_location"
+        assert resp.data["error_code"] == "validation_error"
+        assert "ora_location" in resp.data["error_detail"]["details"]
 
     def test_list_ora_submissions_missing_location(self, api_factory):
         """Test list ORA submissions without ora_location parameter"""
@@ -1226,7 +1235,8 @@ class TestOpenedXCourseViewSet:
         resp = view(req)
         assert resp.status_code == 400
         assert resp.data["success"] is False
-        assert resp.data["error_code"] == "missing_ora_location"
+        assert resp.data["error_code"] == "validation_error"
+        assert "ora_location" in resp.data["error_detail"]["details"]
 
     def test_get_ora_details_with_error_response(self, api_factory, monkeypatch):
         """Test get ORA details when logic returns error (covers lines 556-564)"""
@@ -1315,7 +1325,7 @@ class TestOpenedXAnalyticsViewSet:
         resp = view(req)
 
         assert resp.status_code == 400
-        assert resp.data["error"] == "boom"
+        assert resp.data["error_code"] == "boom"
 
 
 class TestOpenedXRolesViewSet:
@@ -1558,10 +1568,9 @@ class TestBulkEmailAPI:
         user = _auth_user(is_course_staff=True)
         force_authenticate(req, user=user)
         resp = view(req)
-        assert resp.status_code == 200
-        assert resp.data["called"] == "send_bulk_email_logic"
-        # Should be parsed to list
-        assert resp.data["kwargs"]["targets"] == ["myself", "learners"]
+        assert resp.status_code == 400
+        assert resp.data["error_code"] == "validation_error"
+        assert "targets" in resp.data["error_detail"]["details"]
 
     def test_send_bulk_email_targets_as_csv_string(self, api_factory):
         """Test sending bulk email with targets as comma-separated string"""
@@ -1580,10 +1589,9 @@ class TestBulkEmailAPI:
         user = _auth_user(is_course_staff=True)
         force_authenticate(req, user=user)
         resp = view(req)
-        assert resp.status_code == 200
-        assert resp.data["called"] == "send_bulk_email_logic"
-        # Should be parsed to list
-        assert resp.data["kwargs"]["targets"] == ["myself", "staff", "learners"]
+        assert resp.status_code == 400
+        assert resp.data["error_code"] == "validation_error"
+        assert "targets" in resp.data["error_detail"]["details"]
 
     def test_send_bulk_email_missing_required_fields(self, api_factory):
         """Test bulk email validation for missing required fields"""
@@ -1605,7 +1613,7 @@ class TestBulkEmailAPI:
         resp1 = view(req1)
         assert resp1.status_code == 400
         assert resp1.data["success"] is False
-        assert "course_id" in resp1.data["error"]
+        assert "course_id" in resp1.data["error_detail"]["details"]
 
         # Missing subject
         req2 = api_factory.post(
@@ -1621,7 +1629,7 @@ class TestBulkEmailAPI:
         resp2 = view(req2)
         assert resp2.status_code == 400
         assert resp2.data["success"] is False
-        assert "subject" in resp2.data["error"]
+        assert "subject" in resp2.data["error_detail"]["details"]
 
         # Missing body
         req3 = api_factory.post(
@@ -1637,7 +1645,7 @@ class TestBulkEmailAPI:
         resp3 = view(req3)
         assert resp3.status_code == 400
         assert resp3.data["success"] is False
-        assert "body" in resp3.data["error"]
+        assert "body" in resp3.data["error_detail"]["details"]
 
     def test_send_bulk_email_invalid_targets_format(self, api_factory):
         """Test bulk email with invalid targets format"""
@@ -1658,7 +1666,7 @@ class TestBulkEmailAPI:
         resp = view(req)
         assert resp.status_code == 400
         assert resp.data["success"] is False
-        assert "targets" in resp.data["error"]
+        assert "targets" in resp.data["error_detail"]["details"]
 
     def test_send_bulk_email_comprehensive_workflow(self, api_factory):
         """Test a comprehensive bulk email workflow with different scenarios"""

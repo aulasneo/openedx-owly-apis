@@ -49,6 +49,30 @@ Base router registrations are defined in ``openedx_owly_apis/urls.py``:
 
 Authentication is supported via JWT/Bearer/Session. Specific permissions are enforced per endpoint (see notes below).
 
+v1 Contract Source of Truth
+===========================
+
+The v1 API contract is now defined by serializer classes in
+``openedx_owly_apis/views/v1/serializers.py``.
+
+- Request bodies and query parameters are validated at the view boundary before
+  calling the business logic in ``openedx_owly_apis/operations/``.
+- Serializer field names are the authoritative wire contract for v1.
+- The API validates and rejects malformed payloads; it does not normalize them.
+- Caller-side systems such as ``owly-server`` are responsible for shaping their
+  payloads to match the documented serializer contract exactly.
+
+Response Envelope
+=================
+
+v1 endpoints now use a consistent envelope pattern:
+
+- Success: ``{"success": true, "data": {...}}``
+- Error: ``{"success": false, "error": "<message>", "error_detail": {...}, "error_code": "<code>"}``
+
+``error_detail`` contains the structured machine-readable error information used
+for validation feedback and client-side reformulation.
+
 Configuration endpoints (GET)
 =============================
 
@@ -99,6 +123,7 @@ Requires: Authenticated user. Additional role-based permissions per action.
 
 - ``POST /owly-courses/content/problem/create``
   Create a problem component with structured data (e.g., multiple choice). Requires admin, course creator, or course staff.
+  The exact payload contract is defined by ``CreateProblemComponentRequestSerializer``.
 
 - ``POST /owly-courses/content/discussion``
   Add discussion components to a vertical. Requires admin, course creator, or course staff.
@@ -152,6 +177,22 @@ Permissions and Authentication
   - Analytics: ``IsAdminOrCourseStaff``
   - Courses: action-specific guards such as ``IsAdminOrCourseCreator``, ``IsAdminOrCourseCreatorOrCourseStaff``, ``IsAdminOrCourseStaff``
   - Roles: ``IsAuthenticated``
+  - Config: ``IsAuthenticated``
+
+Access Control Policy
+=====================
+
+The API follows this rule:
+
+- if the underlying Open edX implementation path already performs the correct
+  access control for the authenticated user, the API should preserve that
+  behavior and avoid adding stricter app-level checks
+- if an endpoint uses lower-level access paths that could bypass normal Open edX
+  visibility or authoring controls, the API adds the minimum explicit guardrails
+  needed to avoid that bypass
+
+Async course structure job polling additionally verifies that the requesting
+user is authorized to inspect the cached job state.
 
 Development
 ***********
@@ -172,4 +213,3 @@ Project Links
 
 - CI: https://github.com/aulasneo/openedx-owly-apis/actions/workflows/ci.yml
 - Issues: https://github.com/aulasneo/openedx-owly-apis/issues
-

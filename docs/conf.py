@@ -72,6 +72,7 @@ extensions = [
 # Mock external modules that are only available in the Open edX platform runtime.
 # This prevents import errors during autodoc while keeping type/attr resolution minimal.
 autodoc_mock_imports = [
+    'celery',
     'common',
     'common.djangoapps',
     'common.djangoapps.student',

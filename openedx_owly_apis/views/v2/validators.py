@@ -79,7 +79,7 @@ def validate_course_id(course_id: str) -> str:
 
     try:
         CourseKey.from_string(course_id)
-    except InvalidKeyError as e:
+    except (InvalidKeyError, ValueError) as e:
         raise serializers.ValidationError(
             f"Invalid course ID format: {course_id}. "
             "Expected format: course-v1:ORG+COURSE+RUN"
@@ -106,7 +106,7 @@ def validate_unit_id(unit_id: str) -> str:
 
     try:
         UsageKey.from_string(unit_id)
-    except InvalidKeyError as e:
+    except (InvalidKeyError, ValueError) as e:
         raise serializers.ValidationError(
             f"Invalid unit ID format: {unit_id}. "
             "Expected format: block-v1:ORG+COURSE+RUN+type@TYPE+block@BLOCK"

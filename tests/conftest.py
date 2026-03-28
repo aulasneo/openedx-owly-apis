@@ -120,6 +120,24 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     perm_mod.IsAdminOrCourseCreator = _AllowAll
     perm_mod.IsAdminOrCourseStaff = _AllowAll
     perm_mod.IsAdminOrCourseCreatorOrCourseStaff = _AllowAll
+    perm_mod.is_admin_user = (
+        lambda user: bool(  # pylint: disable=unnecessary-lambda-assignment
+            getattr(user, "is_authenticated", False)
+            and (getattr(user, "is_superuser", False) or getattr(user, "is_staff", False))
+        )
+    )
+    perm_mod.is_course_creator_user = (
+        lambda user, org=None: bool(  # pylint: disable=unused-argument,unnecessary-lambda-assignment
+            getattr(user, "is_authenticated", False)
+            and getattr(user, "is_course_creator", False)
+        )
+    )
+    perm_mod.is_course_staff_user = (
+        lambda user, course_key=None: bool(  # pylint: disable=unused-argument,unnecessary-lambda-assignment
+            getattr(user, "is_authenticated", False)
+            and getattr(user, "is_course_staff", False)
+        )
+    )
     sys.modules["openedx_owly_apis.permissions"] = perm_mod
     stubs.append("openedx_owly_apis.permissions")
 

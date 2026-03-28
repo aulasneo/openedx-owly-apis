@@ -5,7 +5,6 @@ from uuid import uuid4
 from django.core.cache import cache
 from django.utils import timezone
 
-
 JOB_CACHE_KEY_PREFIX = "openedx_owly_apis:course_structure_job"
 JOB_CACHE_TIMEOUT_SECONDS = 60 * 60
 
