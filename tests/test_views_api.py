@@ -1173,6 +1173,69 @@ class TestOpenedXCourseViewSet:
         assert resp.data["called"] == "publish_content_logic"
         assert resp.data["kwargs"]["content_id"] == "block-v1:ORG+NUM+RUN+type@vertical+block@unit1"
 
+    def test_publish_content_async_enqueues_job(self, api_factory):
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
+
+        view = OpenedXCourseViewSet.as_view({"post": "publish_content_async"})
+        req = api_factory.post(
+            "/owly-courses/content/publish/async/",
+            {
+                "content_id": "block-v1:ORG+NUM+RUN+type@course+block@course",
+                "publish_type": "course",
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+
+        assert resp.status_code == 202
+        assert resp.data["success"] is True
+        assert resp.data["status"] == "pending"
+        assert resp.data["publish_type"] == "course"
+        assert resp.data["content_id"] == "block-v1:ORG+NUM+RUN+type@course+block@course"
+        assert resp.data["course_id"] == "course-v1:ORG+NUM+RUN"
+        assert resp.data["job_id"]
+
+    def test_get_publish_content_job_returns_cached_job(self, api_factory):
+        from openedx_owly_apis.publish_jobs import create_publish_content_job, update_publish_content_job
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
+
+        job = create_publish_content_job(
+            content_id="block-v1:ORG+NUM+RUN+type@course+block@course",
+            publish_type="course",
+            user_identifier=1,
+            course_id="course-v1:ORG+NUM+RUN",
+        )
+        update_publish_content_job(
+            job["job_id"],
+            status="success",
+            result={"success": True, "published_items": []},
+        )
+
+        view = OpenedXCourseViewSet.as_view({"get": "get_publish_content_job"})
+        req = api_factory.get(f"/owly-courses/content/publish/jobs/{job['job_id']}/")
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req, job_id=job["job_id"])
+
+        assert resp.status_code == 200
+        assert resp.data["job_id"] == job["job_id"]
+        assert resp.data["status"] == "success"
+        assert resp.data["success"] is True
+
+    def test_get_publish_content_job_returns_404_for_missing_job(self, api_factory):
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
+
+        view = OpenedXCourseViewSet.as_view({"get": "get_publish_content_job"})
+        req = api_factory.get("/owly-courses/content/publish/jobs/missing-job/")
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req, job_id="missing-job")
+
+        assert resp.status_code == 404
+        assert resp.data["error_code"] == "job_not_found"
+
     def test_delete_xblock_calls_logic(self, api_factory):
         """Test deleting an xblock component"""
         from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet

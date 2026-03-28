@@ -3,7 +3,7 @@
 from django.db import transaction
 from django.utils.decorators import method_decorator
 from edx_rest_framework_extensions.auth.jwt.authentication import JwtAuthentication
-from opaque_keys.edx.keys import CourseKey
+from opaque_keys.edx.keys import CourseKey, UsageKey
 from openedx.core.lib.api.authentication import BearerAuthentication
 from rest_framework import status, viewsets
 from rest_framework.authentication import SessionAuthentication
@@ -42,7 +42,12 @@ from openedx_owly_apis.permissions import (
     is_course_creator_user,
     is_course_staff_user,
 )
-from openedx_owly_apis.tasks import create_course_structure_task
+from openedx_owly_apis.publish_jobs import (
+    create_publish_content_job,
+    get_publish_content_job,
+    update_publish_content_job,
+)
+from openedx_owly_apis.tasks import create_course_structure_task, publish_content_task
 from openedx_owly_apis.views.v1.response_utils import (
     error_response,
     logic_result_response,
@@ -111,6 +116,48 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             return True
 
         course_id = job.get("course_id")
+        if not course_id:
+            return False
+
+        try:
+            course_key = CourseKey.from_string(course_id)
+        except Exception:  # pylint: disable=broad-except
+            return False
+
+        return (
+            is_course_staff_user(user, course_key)
+            or is_course_creator_user(user, getattr(course_key, "org", None))
+        )
+
+    @staticmethod
+    def _course_id_from_content_id(content_id):
+        if isinstance(content_id, str) and ("+type@" in content_id or content_id.startswith("block-v1:")):
+            try:
+                usage_key = UsageKey.from_string(content_id)
+                course_key = getattr(usage_key, "course_key", None)
+                if course_key:
+                    return str(course_key)
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+        try:
+            return str(CourseKey.from_string(content_id))
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+        return None
+
+    def _can_access_publish_job(self, user, job):
+        if is_admin_user(user):
+            return True
+
+        requested_by = str(job.get("requested_by")) if job.get("requested_by") is not None else None
+        if requested_by and requested_by == str(user.id):
+            return True
+
+        course_id = job.get("course_id")
+        if not course_id:
+            course_id = self._course_id_from_content_id(job.get("content_id"))
         if not course_id:
             return False
 
@@ -577,6 +624,91 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             user_identifier=request.user.id
         )
         return logic_result_response(result)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='content/publish/async',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def publish_content_async(self, request):
+        """Enqueue content publishing and return a cache-backed job id."""
+        data, error = self._validated(PublishContentRequestSerializer, data=request.data)
+        if error:
+            return error
+
+        content_id = data["content_id"]
+        publish_type = data["publish_type"]
+        course_id = self._course_id_from_content_id(content_id)
+
+        job = create_publish_content_job(
+            content_id=content_id,
+            publish_type=publish_type,
+            user_identifier=request.user.id,
+            course_id=course_id,
+        )
+
+        async_result = publish_content_task.delay(
+            job["job_id"],
+            content_id,
+            publish_type,
+            request.user.id,
+        )
+        update_publish_content_job(job["job_id"], task_id=async_result.id)
+
+        return success_response(
+            {
+                "job_id": job["job_id"],
+                "status": "pending",
+                "content_id": content_id,
+                "publish_type": publish_type,
+                "course_id": course_id,
+            },
+            http_status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path=r'content/publish/jobs/(?P<job_id>[^/.]+)',
+        permission_classes=[IsAuthenticated, IsAdminOrCourseStaff],
+    )
+    def get_publish_content_job(self, request, job_id=None):
+        """Return the current status for an async content publish job."""
+        job = get_publish_content_job(job_id)
+        if not job:
+            return error_response(
+                "Async publish job not found",
+                "job_not_found",
+                details={"job_id": job_id},
+                http_status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not self._can_access_publish_job(request.user, job):
+            return error_response(
+                "You do not have access to this async publish job",
+                "job_access_denied",
+                details={"job_id": job_id},
+                http_status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return success_response(
+            {
+                "job_id": job["job_id"],
+                "status": job.get("status"),
+                "content_id": job.get("content_id"),
+                "publish_type": job.get("publish_type"),
+                "course_id": job.get("course_id"),
+                "requested_by": job.get("requested_by"),
+                "task_id": job.get("task_id"),
+                "created_at": job.get("created_at"),
+                "updated_at": job.get("updated_at"),
+                "progress_message": job.get("progress_message"),
+                "result": job.get("result"),
+                "error": job.get("error"),
+                "completed_at": job.get("completed_at"),
+            }
+        )
 
     @action(
         detail=False,

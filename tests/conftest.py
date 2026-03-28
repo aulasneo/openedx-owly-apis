@@ -75,7 +75,15 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
             return self._raw
 
     class _UsageKey(_CourseKey):
-        pass
+        def __init__(self, raw):
+            super().__init__(raw)
+            self.course_key = None
+            if raw and ":" in raw:
+                try:
+                    course_part = raw.split(":", 1)[1].split("+type@", 1)[0]
+                    self.course_key = _CourseKey(f"course-v1:{course_part}")
+                except Exception:  # pragma: no cover  # pylint: disable=broad-exception-caught
+                    self.course_key = None
     mod.CourseKey = _CourseKey
     mod.UsageKey = _UsageKey
     stubs.append("opaque_keys.edx.keys")
@@ -194,6 +202,7 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
             return SimpleNamespace(id="stub-task-id")
 
     tasks_mod.create_course_structure_task = _AsyncTaskStub()
+    tasks_mod.publish_content_task = _AsyncTaskStub()
     sys.modules["openedx_owly_apis.tasks"] = tasks_mod
     stubs.append("openedx_owly_apis.tasks")
 
