@@ -1,0 +1,256 @@
+# Change Log
+
+All enhancements and patches to `openedx_owly_apis` are documented in this file.
+This project follows [Keep a Changelog](https://keepachangelog.com/) and
+[Semantic Versioning](https://semver.org/).
+
+There should always be a `Version 1.4.0 (2025-10-22)` section for changes
+pending release.
+
+## Version 2.1.0 (2026-03-28)
+
+### Added
+
+- Add async course structure job endpoints with cache-backed job tracking.
+- Add async content publish job endpoints so long-running publish operations can
+  be dispatched and polled without blocking the request.
+
+### Changed
+
+- Refactor the v1 API to use explicit serializer-based request validation and a
+  more consistent response contract.
+- Move payload normalization responsibility to callers so the API remains
+  contract-strict instead of silently reshaping requests.
+- Convert the project changelog from reStructuredText to Markdown.
+
+### Fixed
+
+- Handle `null` optional list values in course structure payloads by validating
+  them explicitly instead of failing later in structure processing.
+- Reject malformed problem payloads with clearer contract errors instead of
+  opaque failures deeper in the logic layer.
+
+## Version 2.0.1 (2026-03-26)
+
+### Fixed
+
+- Reject invalid course structure payloads that use unsupported shapes such as
+  `units_config.sections` instead of the supported `units_config.units` format.
+- Return an explicit error when a course structure request would otherwise
+  succeed as an empty no-op with `created_structure: []`.
+- Add regression coverage for course structure payload validation.
+
+## Version 2.0.0 (2026-03-20)
+
+### Changed
+
+- Align package metadata and tox targets with the Teak-era Open edX stack:
+  - keep Django support at `4.2`
+  - advertise Python `3.11` and `3.12`
+  - remove the obsolete universal wheel setting
+- Refresh generated requirements files and add missing runtime dependencies used
+  by the plugin:
+  - `edx-django-utils`
+  - `edx-drf-extensions`
+- Normalize the config endpoint authentication classes to support JWT, Bearer,
+  and Session auth.
+- Make analytics timestamps timezone-aware in test and runtime code.
+
+### Fixed
+
+- Fix waffle flag evaluation for anonymous requests by importing and using
+  `flag_is_active` correctly.
+- Return `400` from analytics endpoints when the logic layer reports an error
+  instead of always responding with `200`.
+- Return a payload with `200` for grade deletion instead of pairing a response
+  body with `204 No Content`.
+- Remove leaked course tree debug metadata and raw `print(...)` tracing from the
+  public API path.
+- Add regression coverage for waffle flag evaluation and analytics error
+  handling.
+
+## Version 1.6.3 (2025-12-12)
+
+### Changed
+
+- Fix import error and quality tests in utilities.
+
+## Version 1.6.2 (2025-12-12)
+
+### Changed
+
+- Fix quality errors.
+
+## Version 1.6.1 (2025-12-12)
+
+### Changed
+
+- Fix import of views.
+
+## Version 1.6.0 (2025-12-11)
+
+### Added
+
+- **Grade Management**:
+  - Add grade management operations for student assessments
+
+### Changed
+
+- Simplify API URL structure by removing redundant path prefixes.
+- Standardize whitespace and improve logging in grade management operations.
+- Extract `parse_grade_id` function to the validators module with comprehensive
+  test coverage.
+
+## Version 1.5.0 (2025-10-31)
+
+### Added
+
+- **Course Tree API**:
+  - Add endpoint with search and traversal capabilities
+  - Implement CMS-first course tree building with modulestore traversal and
+    debug logging
+  - Support draft and published modulestore branches
+- **Unit Contents**:
+  - Add API endpoint to fetch unit contents and their raw data
+- **ORA Grading**:
+  - Add student response extraction and improve workflow handling
+
+### Changed
+
+- Refactor permission to `IsAdminOrCourseStaff`.
+
+### Fixed
+
+- Update permission requirements for unit contents endpoint.
+
+## Version 1.4.0 (2025-10-22)
+
+### Added
+
+- **Course Staff Management APIs**:
+  - `POST /staff/manage`: Add or remove users from course staff roles
+    (`staff`, `course_creator`)
+  - `GET /staff/list`: List all users with course staff roles, with optional
+    role filtering
+  - Support for simplified role types: `staff` and `course_creator`
+  - Enhanced role management with detailed user information
+- **Open Response Assessment (ORA) Management**:
+  - `POST /content/ora`: Create ORA components with full configuration support
+  - `POST /content/ora/grade`: Grade ORA submissions using staff assessment
+  - `GET /content/ora/details`: Get detailed ORA information including rubric
+    structure
+  - `GET /content/ora/submissions`: List all submissions for an ORA component
+  - Support for peer assessment, self-assessment, and staff assessment
+    workflows
+  - Comprehensive rubric management and grading capabilities
+- **Cohort Management APIs**:
+  - `POST /cohorts/create`: Create new cohorts with manual or random assignment
+  - `GET /cohorts/list`: List all cohorts in a course
+  - `POST /cohorts/members/add`: Add users to specific cohorts
+  - `POST /cohorts/members/remove`: Remove users from cohorts
+  - `GET /cohorts/members/list`: List all members of a cohort
+  - `DELETE /cohorts/delete`: Delete cohorts and their memberships
+
+### Changed
+
+- Reorganized course management endpoints with clearer permission models.
+- Enhanced error handling and validation across all endpoints.
+- Improved documentation with detailed examples and error scenarios.
+- Standardized response formats across all API endpoints.
+- Improved submission retrieval logic and error handling in ORA functions.
+- Refactored ORA content logic and tests for clarity.
+
+### Documentation
+
+- Added comprehensive API documentation for course staff management.
+- Detailed ORA workflow documentation with grading examples.
+- Cohort management usage examples and best practices.
+- Enhanced endpoint documentation with request/response examples.
+- Fixed changelog header underline length.
+- Formatting cleanups and clarity improvements in ORA documentation.
+
+## Version 1.2.0 (2025-09-23)
+
+### Added
+
+- Add course staff management endpoints and enhance waffle flag checks
+  (`ed44fa2`).
+- Add `OpenedXConfigViewSet` for managing the Owly chat feature toggle
+  (`5b480a2`).
+
+### Changed
+
+- Remove unused authentication and permission imports from the config view
+  (`d2e6e98`).
+- Remove authentication and permission classes from `OpenedXConfigViewSet`
+  (`1146370`).
+
+### Documentation
+
+- Improve API documentation formatting and clarity for course staff endpoints
+  (`db63cbe`).
+
+## Version 1.1.0 (2025-09-08)
+
+### Added
+
+- Problem creation endpoints and logic for multiple problem types:
+  - Support for dropdown problems with XML generation
+  - Enhanced XML generation for multiple choice problems with input validation
+    and escaping
+  - `POST /add_problem_content` endpoint for problem integration
+- Content publishing functionality:
+  - `POST /publish` endpoint for publishing courses and units
+  - Content publishing logic with modulestore integration
+- XBlock management capabilities:
+  - `POST /delete_xblock` endpoint for removing course components
+  - Delete XBlock logic with modulestore integration
+- Certificate management enhancements:
+  - Toggle certificate logic for managing certificate active status
+  - Certificate activation/deactivation integration in course configuration
+  - Simplified certificate activation logic without `certificate_id`
+    requirement
+
+### Changed
+
+- Enhanced XML generation for problem types with improved input validation and
+  error handling.
+- Reorganized imports in `courses.py` for better code readability.
+- Updated `delete_xblock` logic to use `acting_user` consistently.
+
+### Fixed
+
+- Corrected `delete_xblock` logic parameter usage from `user_identifier` to
+  `acting_user`.
+
+## Version 1.0.0 (2025-08-27)
+
+### Added
+
+- DRF ViewSets and endpoints for analytics: `overview`, `enrollments`,
+  `discussions`, `detailed` under `/owly-analytics/` (see
+  `openedx_owly_apis/views/analytics.py`).
+- Course management endpoints under `/owly-courses/` (see
+  `openedx_owly_apis/views/courses.py`):
+  - `POST /create`: create course.
+  - `POST /structure`: create or edit course structure (chapters, subsections,
+    verticals).
+  - `POST /content/html`: add an HTML component to a vertical.
+  - `POST /content/video`: add a video component to a vertical.
+  - `POST /content/problem`: add a problem component to a vertical.
+  - `POST /content/discussion`: add a discussion component to a vertical.
+  - `POST /settings/update`: update course settings (dates, details, and so
+    on).
+  - `POST /settings/advanced`: update advanced settings.
+  - `POST /certificates/configure`: enable or configure certificates.
+  - `POST /units/availability/control`: control unit availability and due
+    dates.
+- Roles endpoint under `/owly-roles/me` to determine the effective user role
+  (see `openedx_owly_apis/views/roles.py`).
+- Authentication via `JwtAuthentication` and `SessionAuthentication` across
+  viewsets.
+
+### Documentation
+
+- README: comprehensive API overview, endpoint list, and Tutor plugin
+  installation instructions for `tutor-contrib-owly`.

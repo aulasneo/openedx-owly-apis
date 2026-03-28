@@ -7,6 +7,7 @@ full Open edX platform during tests.
 
 import sys
 import types
+from types import SimpleNamespace
 
 import pytest
 
@@ -74,7 +75,15 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
             return self._raw
 
     class _UsageKey(_CourseKey):
-        pass
+        def __init__(self, raw):
+            super().__init__(raw)
+            self.course_key = None
+            if raw and ":" in raw:
+                try:
+                    course_part = raw.split(":", 1)[1].split("+type@", 1)[0]
+                    self.course_key = _CourseKey(f"course-v1:{course_part}")
+                except Exception:  # pragma: no cover  # pylint: disable=broad-exception-caught
+                    self.course_key = None
     mod.CourseKey = _CourseKey
     mod.UsageKey = _UsageKey
     stubs.append("opaque_keys.edx.keys")
@@ -119,6 +128,24 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     perm_mod.IsAdminOrCourseCreator = _AllowAll
     perm_mod.IsAdminOrCourseStaff = _AllowAll
     perm_mod.IsAdminOrCourseCreatorOrCourseStaff = _AllowAll
+    perm_mod.is_admin_user = (
+        lambda user: bool(  # pylint: disable=unnecessary-lambda-assignment
+            getattr(user, "is_authenticated", False)
+            and (getattr(user, "is_superuser", False) or getattr(user, "is_staff", False))
+        )
+    )
+    perm_mod.is_course_creator_user = (
+        lambda user, org=None: bool(  # pylint: disable=unused-argument,unnecessary-lambda-assignment
+            getattr(user, "is_authenticated", False)
+            and getattr(user, "is_course_creator", False)
+        )
+    )
+    perm_mod.is_course_staff_user = (
+        lambda user, course_key=None: bool(  # pylint: disable=unused-argument,unnecessary-lambda-assignment
+            getattr(user, "is_authenticated", False)
+            and getattr(user, "is_course_staff", False)
+        )
+    )
     sys.modules["openedx_owly_apis.permissions"] = perm_mod
     stubs.append("openedx_owly_apis.permissions")
 
@@ -166,6 +193,18 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     ops_courses.list_grades_logic = _simple_ret("list_grades_logic")
     sys.modules["openedx_owly_apis.operations.courses"] = ops_courses
     stubs.append("openedx_owly_apis.operations.courses")
+
+    tasks_mod = types.ModuleType("openedx_owly_apis.tasks")
+
+    class _AsyncTaskStub:
+        @staticmethod
+        def delay(*args, **kwargs):  # pylint: disable=unused-argument
+            return SimpleNamespace(id="stub-task-id")
+
+    tasks_mod.create_course_structure_task = _AsyncTaskStub()
+    tasks_mod.publish_content_task = _AsyncTaskStub()
+    sys.modules["openedx_owly_apis.tasks"] = tasks_mod
+    stubs.append("openedx_owly_apis.tasks")
 
     ops_analytics = types.ModuleType("openedx_owly_apis.operations.analytics")
 

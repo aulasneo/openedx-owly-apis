@@ -1,14 +1,10 @@
 """
-OpenedX Roles ViewSet
-Endpoint para consultar el rol efectivo del usuario autenticado.
+Open edX role inspection endpoints.
 
-Determina:
-- SuperAdmin: Django superuser o global staff (user.is_superuser o user.is_staff)
-- Course Staff (NO staff de Django): staff/instructor/limited_staff en un curso específico
-- CourseCreator: según CourseCreatorRole u OrgContentCreatorRole (respeta settings de edx)
-- Authenticated: usuario autenticado básico
+These endpoints report the effective role of the authenticated user in the
+requested course or organization context.
 
-Uso:
+Example:
 GET /owly-roles/me?course_id=course-v1:ORG+NUM+RUN&org=ORG
 """
 from typing import Optional
@@ -22,19 +18,30 @@ from rest_framework import viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
+
+from openedx_owly_apis.views.v1.response_utils import error_response, success_response
+from openedx_owly_apis.views.v1.serializers import RolesMeQuerySerializer
 
 
 class OpenedXRolesViewSet(viewsets.ViewSet):
-    """
-    ViewSet para roles del usuario en Open edX.
-    """
+    """Endpoints for resolving the effective Open edX role of the current user."""
     authentication_classes = (
         JwtAuthentication,
         BearerAuthentication,
         SessionAuthentication,
     )
     permission_classes = [IsAuthenticated]
+
+    @staticmethod
+    def _validated(data):
+        serializer = RolesMeQuerySerializer(data=data)
+        if not serializer.is_valid():
+            return None, error_response(
+                "Validation failed",
+                "validation_error",
+                details=serializer.errors,
+            )
+        return serializer.validated_data, None
 
     @staticmethod
     def _parse_course_key(course_id: Optional[str]):
@@ -68,19 +75,23 @@ class OpenedXRolesViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["get"], url_path="me")
     def me(self, request):
         """
-        Devuelve el rol efectivo del usuario autenticado.
+        Return the effective role of the authenticated user.
 
-        Query params opcionales:
-        - course_id: para evaluar si es staff del curso
-        - org: para evaluar course creator a nivel organización
+        Optional query parameters:
+        - ``course_id``: evaluate whether the user is course staff for that course
+        - ``org``: evaluate whether the user is an organization-scoped course creator
         """
+        data, error = self._validated(request.query_params)
+        if error:
+            return error
+
         user = request.user
-        course_id = request.query_params.get("course_id")
-        org = request.query_params.get("org")
+        course_id = data.get("course_id")
+        org = data.get("org")
 
         course_key, course_err = self._parse_course_key(course_id)
         if course_err:
-            return Response({"error": course_err}, status=400)
+            return error_response(course_err, "invalid_course_id")
 
         is_authenticated = bool(user and user.is_authenticated)
         is_superadmin = bool(user and (user.is_superuser or user.is_staff))
@@ -96,7 +107,7 @@ class OpenedXRolesViewSet(viewsets.ViewSet):
             "Anonymous"
         )
 
-        return Response({
+        return success_response({
             "username": getattr(user, "username", None),
             "roles": {
                 "superadmin": is_superadmin,

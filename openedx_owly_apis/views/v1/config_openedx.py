@@ -5,23 +5,23 @@ from openedx.core.lib.api.authentication import BearerAuthentication
 from rest_framework import viewsets
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
-from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 
 # Logic operations for configuration endpoints
 from openedx_owly_apis.operations.config import is_owly_chat_enabled_logic
+from openedx_owly_apis.views.v1.response_utils import success_response
 
 logger = logging.getLogger(__name__)
 
 
 class OpenedXConfigViewSet(viewsets.ViewSet):
-    """
-    ViewSet para configuracuión de la plataforma Open edX.
-    """
+    """Configuration endpoints for the Open edX platform integration."""
     authentication_classes = (
         JwtAuthentication,
         BearerAuthentication,
         SessionAuthentication,
     )
+    permission_classes = [IsAuthenticated]
 
     @action(
         detail=False,
@@ -40,4 +40,4 @@ class OpenedXConfigViewSet(viewsets.ViewSet):
         GET /api/v1/owly-config/enable_owly_chat/
         """
         result = is_owly_chat_enabled_logic(request)
-        return Response(result)
+        return success_response(result)
