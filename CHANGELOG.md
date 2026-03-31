@@ -7,6 +7,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 There should always be a `Version 1.4.0 (2025-10-22)` section for changes
 pending release.
 
+## Unreleased
+
+### Added
+
+- Add a course rerun API endpoint backed by Open edX Studio's internal rerun
+  logic.
+
+### Changed
+
+- Restrict course rerun access to Open edX admins/global staff to match Studio
+  behavior.
+
 ## Version 2.1.0 (2026-03-28)
 
 ### Added
