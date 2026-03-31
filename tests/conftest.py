@@ -125,6 +125,7 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     class _AllowAll:  # mimics DRF BasePermission
         def has_permission(self, request, _view):
             return True
+    perm_mod.IsAdminUser = _AllowAll
     perm_mod.IsAdminOrCourseCreator = _AllowAll
     perm_mod.IsAdminOrCourseStaff = _AllowAll
     perm_mod.IsAdminOrCourseCreatorOrCourseStaff = _AllowAll
@@ -158,6 +159,7 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
         return _fn
     ops_courses.update_course_settings_logic = _simple_ret("update_course_settings_logic")
     ops_courses.create_course_logic = _simple_ret("create_course_logic")
+    ops_courses.rerun_course_logic = _simple_ret("rerun_course_logic")
     ops_courses.update_advanced_settings_logic = _simple_ret("update_advanced_settings_logic")
     ops_courses.enable_configure_certificates_logic = _simple_ret("enable_configure_certificates_logic")
     ops_courses.control_unit_availability_logic = _simple_ret("control_unit_availability_logic")
@@ -253,6 +255,7 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
     # Add all the course operation stubs
     ops_courses.send_bulk_email_logic = _mk_courses_stub("send_bulk_email_logic")
     ops_courses.create_course_logic = _mk_courses_stub("create_course_logic")
+    ops_courses.rerun_course_logic = _mk_courses_stub("rerun_course_logic")
     ops_courses.update_course_settings_logic = _mk_courses_stub("update_course_settings_logic")
     ops_courses.create_course_structure_logic = _mk_courses_stub("create_course_structure_logic")
     ops_courses.add_html_content_logic = _mk_courses_stub("add_html_content_logic")

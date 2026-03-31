@@ -30,11 +30,13 @@ from openedx_owly_apis.operations.courses import (
     get_course_tree_logic,
     get_vertical_contents_logic,
     publish_content_logic,
+    rerun_course_logic,
     send_bulk_email_logic,
     update_advanced_settings_logic,
     update_course_settings_logic,
 )
 from openedx_owly_apis.permissions import (
+    IsAdminUser,
     IsAdminOrCourseCreator,
     IsAdminOrCourseCreatorOrCourseStaff,
     IsAdminOrCourseStaff,
@@ -77,6 +79,7 @@ from openedx_owly_apis.views.v1.serializers import (
     OraLocationQuerySerializer,
     ProblemContentRequestSerializer,
     PublishContentRequestSerializer,
+    RerunCourseRequestSerializer,
     UnitContentsQuerySerializer,
     UpdateAdvancedSettingsRequestSerializer,
     UpdateCourseSettingsRequestSerializer,
@@ -188,6 +191,29 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             display_name=data.get('display_name'),
             start_date=data.get('start_date'),
             user_identifier=request.user.id
+        )
+        return logic_result_response(result, success_status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='rerun',
+        permission_classes=[IsAuthenticated, IsAdminUser],
+    )
+    def rerun_course(self, request):
+        data, error = self._validated(RerunCourseRequestSerializer, data=request.data)
+        if error:
+            return error
+        result = rerun_course_logic(
+            source_course_id=data.get('course_id'),
+            run=data.get('run'),
+            display_name=data.get('display_name'),
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            org=data.get('org'),
+            course_number=data.get('course_number'),
+            background=data.get('background', True),
+            user_identifier=request.user.id,
         )
         return logic_result_response(result, success_status=status.HTTP_201_CREATED)
 

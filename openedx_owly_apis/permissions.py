@@ -138,6 +138,20 @@ class IsAdminOrCourseCreator(BasePermission):
         return IsCourseCreator().has_permission(request, _view)
 
 
+class IsAdminUser(BasePermission):
+    """Allow access only to site admins."""
+
+    message = "User must be an admin"
+
+    def has_permission(self, request, _view) -> bool:
+        """Allow if the user is a site admin."""
+        user = request.user
+        return bool(
+            getattr(user, "is_authenticated", False)
+            and (getattr(user, "is_superuser", False) or getattr(user, "is_staff", False))
+        )
+
+
 class IsAdminOrCourseStaff(BasePermission):
     """Allow access to site admins or course staff for the resolved course."""
 

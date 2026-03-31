@@ -696,6 +696,122 @@ def create_course_logic(org: str, course_number: str, run: str,
         }
 
 
+def rerun_course_logic(
+    source_course_id: str,
+    run: str,
+    display_name: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    org: str = None,
+    course_number: str = None,
+    background: bool = True,
+    user_identifier=None,
+) -> dict:
+    """Create a course rerun by delegating to Studio's internal rerun helper."""
+
+    try:
+        from datetime import datetime
+
+        from cms.djangoapps.contentstore.views.course import rerun_course
+
+        acting_user = _get_acting_user(user_identifier)
+        if not acting_user:
+            logger.error("No acting user available for course rerun. identifier=%s", user_identifier)
+            return {"success": False, "error": "no_user", "message": "No acting user available"}
+
+        source_course_key = CourseKey.from_string(source_course_id)
+        destination_org = org or getattr(source_course_key, "org", None)
+        destination_course_number = course_number or getattr(source_course_key, "course", None)
+
+        if not destination_org or not destination_course_number:
+            return {
+                "success": False,
+                "error": "invalid_source_course",
+                "message": "Could not derive organization and course number from source course.",
+                "source_course_id": source_course_id,
+            }
+
+        fields = {}
+        if display_name:
+            fields["display_name"] = display_name
+        if start_date:
+            try:
+                fields["start"] = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            except ValueError:
+                return {
+                    "success": False,
+                    "error": "invalid_start_date",
+                    "message": f"Invalid start_date format: {start_date}",
+                }
+        if end_date:
+            try:
+                fields["end"] = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            except ValueError:
+                return {
+                    "success": False,
+                    "error": "invalid_end_date",
+                    "message": f"Invalid end_date format: {end_date}",
+                }
+
+        destination_course_key = rerun_course(
+            acting_user,
+            source_course_key,
+            destination_org,
+            destination_course_number,
+            run,
+            fields,
+            background=background,
+        )
+
+        destination_course = None
+        try:
+            destination_course = CourseOverview.get_from_id(destination_course_key)
+        except Exception:  # pylint: disable=broad-except
+            logger.info("CourseOverview not available yet for rerun destination %s", destination_course_key)
+
+        return {
+            "success": True,
+            "method": "rerun_course",
+            "source_course_id": str(source_course_key),
+            "course_created": {
+                "course_id": str(destination_course_key),
+                "display_name": getattr(destination_course, "display_name", display_name),
+                "org": destination_org,
+                "number": destination_course_number,
+                "run": run,
+                "created_by": acting_user.username,
+                "studio_url": f"/course/{destination_course_key}",
+                "lms_url": f"/courses/{destination_course_key}/about",
+            },
+            "background": bool(background),
+        }
+
+    except DuplicateCourseError:
+        logger.info(
+            "Course rerun already exists source=%s destination=%s+%s+%s",
+            source_course_id,
+            org,
+            course_number,
+            run,
+        )
+        return {
+            "success": False,
+            "error": "duplicate_course",
+            "message": (
+                f"Course {org or 'source-org'}+{course_number or 'source-course'}+{run} already exists"
+            ),
+        }
+    except Exception as e:  # pylint: disable=broad-except
+        logger.exception("Course rerun failed: %s", e)
+        return {
+            "success": False,
+            "error": "rerun_failed",
+            "message": str(e),
+            "source_course_id": source_course_id,
+            "requested_by": str(user_identifier),
+        }
+
+
 def extract_section_number(name: str) -> str:
     """Extrae número de una cadena de texto"""
     import re

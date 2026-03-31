@@ -50,6 +50,30 @@ class TestOpenedXCourseViewSet:
         # kwargs echo back from stubbed logic
         assert body["kwargs"]["org"] == "ORG"
 
+    def test_rerun_course_calls_logic_and_returns_payload(self, api_factory):
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
+        view = OpenedXCourseViewSet.as_view({"post": "rerun_course"})
+        req = api_factory.post(
+            "/owly-courses/rerun/",
+            {
+                "course_id": "course-v1:ORG+NUM+2024",
+                "run": "2025",
+                "display_name": "Name 2025",
+                "start_date": "2025-01-01",
+                "background": True,
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_creator=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+        assert resp.status_code == 201
+        body = resp.data
+        assert body["called"] == "rerun_course_logic"
+        assert body["kwargs"]["source_course_id"] == "course-v1:ORG+NUM+2024"
+        assert body["kwargs"]["run"] == "2025"
+        assert body["kwargs"]["background"] is True
+
     def test_update_settings_calls_logic(self, api_factory):
         from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
         view = OpenedXCourseViewSet.as_view({"post": "update_settings"})

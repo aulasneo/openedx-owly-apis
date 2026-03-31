@@ -49,6 +49,17 @@ class CreateCourseRequestSerializer(serializers.Serializer):
     start_date = serializers.CharField(required=False, allow_blank=False)
 
 
+class RerunCourseRequestSerializer(serializers.Serializer, CourseIdSerializerMixin):
+    course_id = serializers.CharField()
+    run = serializers.CharField(max_length=255)
+    display_name = serializers.CharField(required=False, max_length=255)
+    start_date = serializers.CharField(required=False, allow_blank=False)
+    end_date = serializers.CharField(required=False, allow_blank=False)
+    org = serializers.CharField(required=False, max_length=255)
+    course_number = serializers.CharField(required=False, max_length=255)
+    background = serializers.BooleanField(required=False, default=True)
+
+
 class CourseStructureRequestSerializer(serializers.Serializer, CourseIdSerializerMixin):
     course_id = serializers.CharField()
     units_config = serializers.JSONField()
