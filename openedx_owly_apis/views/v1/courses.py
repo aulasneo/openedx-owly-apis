@@ -36,10 +36,10 @@ from openedx_owly_apis.operations.courses import (
     update_course_settings_logic,
 )
 from openedx_owly_apis.permissions import (
-    IsAdminUser,
     IsAdminOrCourseCreator,
     IsAdminOrCourseCreatorOrCourseStaff,
     IsAdminOrCourseStaff,
+    IsAdminUser,
     is_admin_user,
     is_course_creator_user,
     is_course_staff_user,

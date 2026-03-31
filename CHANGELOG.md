@@ -7,7 +7,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 There should always be a `Version 1.4.0 (2025-10-22)` section for changes
 pending release.
 
-## Unreleased
+## Version 2.1.1 (2026-03-31)
 
 ### Added
 
