@@ -1,11 +1,12 @@
 # Core requirements for using this application
 -c constraints.txt
 
-Django             # Web application framework
-djangorestframework # REST API framework
-django-filter      # Filtering support for DRF
-edx-django-utils   # Open edX plugin hooks used by apps.py
-edx-drf-extensions # JWT auth backend used by the API views
+# Match the versions used by edx-platform release/ulmo for plugin compatibility.
+Django==5.2.11             # Web application framework
+djangorestframework==3.16.1 # REST API framework
+django-filter==25.2        # Filtering support for DRF
+edx-django-utils==8.0.1    # Open edX plugin hooks used by apps.py
+edx-drf-extensions==10.6.0 # JWT auth backend used by the API views
 
-openedx-atlas
-drf-yasg
+openedx-atlas==0.7.0
+drf-yasg==1.21.11

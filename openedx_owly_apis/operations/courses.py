@@ -2812,7 +2812,7 @@ def toggle_certificate_logic(course_id: str, certificate_id: str, is_active: boo
 
         # Use OpenEdX CertificateManager pattern
         try:
-            from cms.djangoapps.contentstore.views.certificates import CertificateManager
+            from cms.djangoapps.contentstore.views.certificate_manager import CertificateManager
 
             # Get current certificates
             certificates = getattr(course, 'certificates', {})
@@ -2897,7 +2897,7 @@ def toggle_certificate_simple_logic(course_id: str, is_active: bool, user_identi
     """
     Toggle certificate active status following official OpenedX pattern (without certificate_id).
 
-    This follows the exact pattern from cms/djangoapps/contentstore/views/certificates.py
+    This follows the exact pattern from Studio certificate management code in edx-platform.
     certificate_activation_handler - activates/deactivates the first certificate found.
 
     Args:
@@ -2944,7 +2944,7 @@ def toggle_certificate_simple_logic(course_id: str, is_active: bool, user_identi
 
         # Use OpenedX CertificateManager pattern - exactly like official code
         try:
-            from cms.djangoapps.contentstore.views.certificates import CertificateManager
+            from cms.djangoapps.contentstore.views.certificate_manager import CertificateManager
 
             # Get certificates using official CertificateManager
             certificates = CertificateManager.get_certificates(course)
@@ -5422,10 +5422,10 @@ def send_bulk_email_logic(
     from opaque_keys.edx.keys import CourseKey
     from openedx.core.djangoapps.course_groups.models import CourseUserGroup
     try:
-        # Prefer platform-defined constant when available
+        # Prefer platform-defined constant when available.
         from openedx.core.djangoapps.course_groups.models import COHORT_GROUP  # type: ignore
-    except Exception:  # Fallback for platforms without exported constant
-        COHORT_GROUP = 'cohort'  # type: ignore
+    except Exception:  # Fallback for platforms that only expose the enum on the model.
+        COHORT_GROUP = CourseUserGroup.COHORT
 
     try:
         if not course_id:

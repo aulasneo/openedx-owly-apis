@@ -25,10 +25,7 @@ jobs:
             toxenv: pii_check
           - os: ubuntu-latest
             python-version: "3.11"
-            toxenv: django42
-          - os: ubuntu-latest
-            python-version: "3.12"
-            toxenv: django42
+            toxenv: django52
     steps:
       - uses: actions/checkout@v5
       - name: setup python
@@ -51,7 +48,7 @@ jobs:
         # Skip Codecov on forked PRs and when token is not available (e.g., protected branches or private repos).
         if: |
           matrix.python-version == '3.11' &&
-          matrix.toxenv == 'django42' &&
+          matrix.toxenv == 'django52' &&
           (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) &&
           env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v4

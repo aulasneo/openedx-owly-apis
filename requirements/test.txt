@@ -30,12 +30,14 @@ code-annotations==1.8.2
     # via -r requirements/test.in
 coverage[toml]==7.10.5
     # via pytest-cov
-cryptography==46.0.5
+cryptography==45.0.7
     # via
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
     #   -r requirements/base.txt
     #   pyjwt
     # via
-    #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/common_constraints.txt
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
     #   -r requirements/base.txt
     #   django-crum
     #   django-filter
@@ -49,7 +51,7 @@ django-crum==0.7.9
     # via
     #   -r requirements/base.txt
     #   edx-django-utils
-django-filter==25.1
+django-filter==25.2
     # via -r requirements/base.txt
 django-waffle==5.0.0
     # via
@@ -71,7 +73,7 @@ drf-jwt==1.19.2
     # via
     #   -r requirements/base.txt
     #   edx-drf-extensions
-drf-yasg==1.21.15
+drf-yasg==1.21.11
     # via -r requirements/base.txt
 edx-django-utils==8.0.1
     # via
@@ -126,8 +128,9 @@ pyjwt[crypto]==2.12.1
     #   -r requirements/base.txt
     #   drf-jwt
     #   edx-drf-extensions
-pymongo==4.16.0
+pymongo==4.4.0
     # via
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
     #   -r requirements/base.txt
     #   edx-opaque-keys
 pynacl==1.6.2

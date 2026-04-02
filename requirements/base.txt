@@ -16,11 +16,14 @@ charset-normalizer==3.4.6
     # via requests
 click==8.1.8
     # via edx-django-utils
-cryptography==46.0.5
-    # via pyjwt
-django==4.2.23
+cryptography==45.0.7
     # via
-    #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
+    #   pyjwt
+django==5.2.11
+    # via
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/common_constraints.txt
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
     #   -r requirements/base.in
     #   django-crum
     #   django-filter
@@ -32,7 +35,7 @@ django==4.2.23
     #   edx-drf-extensions
 django-crum==0.7.9
     # via edx-django-utils
-django-filter==25.1
+django-filter==25.2
     # via -r requirements/base.in
 django-waffle==5.0.0
     # via
@@ -48,7 +51,7 @@ dnspython==2.7.0
     # via pymongo
 drf-jwt==1.19.2
     # via edx-drf-extensions
-drf-yasg==1.21.15
+drf-yasg==1.21.11
     # via -r requirements/base.in
 edx-django-utils==8.0.1
     # via
@@ -74,8 +77,10 @@ pyjwt[crypto]==2.12.1
     # via
     #   drf-jwt
     #   edx-drf-extensions
-pymongo==4.16.0
-    # via edx-opaque-keys
+pymongo==4.4.0
+    # via
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
+    #   edx-opaque-keys
 pynacl==1.6.2
     # via edx-django-utils
 pytz==2026.1.post1

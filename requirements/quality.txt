@@ -42,15 +42,17 @@ coverage[toml]==7.10.5
     # via
     #   -r requirements/test.txt
     #   pytest-cov
-cryptography==46.0.5
+cryptography==45.0.7
     # via
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
     #   -r requirements/test.txt
     #   pyjwt
 dill==0.4.1
     # via pylint
-django==4.2.23
+django==5.2.11
     # via
-    #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/common_constraints.txt
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
     #   -r requirements/test.txt
     #   django-crum
     #   django-filter
@@ -64,7 +66,7 @@ django-crum==0.7.9
     # via
     #   -r requirements/test.txt
     #   edx-django-utils
-django-filter==25.1
+django-filter==25.2
     # via -r requirements/test.txt
 django-waffle==5.0.0
     # via
@@ -85,7 +87,7 @@ drf-jwt==1.19.2
     # via
     #   -r requirements/test.txt
     #   edx-drf-extensions
-drf-yasg==1.21.15
+drf-yasg==1.21.11
     # via -r requirements/test.txt
 edx-django-utils==8.0.1
     # via
@@ -143,8 +145,10 @@ psutil==7.2.2
     # via
     #   -r requirements/test.txt
     #   edx-django-utils
-pycodestyle==2.14.0
-    # via -r requirements/quality.in
+pycodestyle==2.8.0
+    # via
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
+    #   -r requirements/quality.in
 pycparser==2.23
     # via
     #   -r requirements/test.txt
@@ -174,8 +178,9 @@ pylint-plugin-utils==0.9.0
     # via
     #   pylint-celery
     #   pylint-django
-pymongo==4.16.0
+pymongo==4.4.0
     # via
+    #   -c https://raw.githubusercontent.com/openedx/edx-platform/release/ulmo/requirements/constraints.txt
     #   -r requirements/test.txt
     #   edx-opaque-keys
 pynacl==1.6.2
