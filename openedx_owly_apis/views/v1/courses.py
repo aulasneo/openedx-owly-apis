@@ -407,6 +407,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
             search_id=data.get('search_id'),
             search_type=data.get('search_type'),
             search_name=data.get('search_name'),
+            content_branch=data.get('content_branch'),
             user_identifier=request.user.id
         )
 
@@ -436,6 +437,7 @@ class OpenedXCourseViewSet(viewsets.ViewSet):
         result = get_vertical_contents_logic(
             course_id=data.get('course_id'),
             vertical_id=data.get('vertical_id'),
+            content_branch=data.get('content_branch'),
             user_identifier=request.user.id,
         )
 
