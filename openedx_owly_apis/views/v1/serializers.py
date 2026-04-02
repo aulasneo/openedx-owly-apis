@@ -79,11 +79,21 @@ class CourseTreeQuerySerializer(serializers.Serializer, CourseIdSerializerMixin,
     search_id = serializers.CharField(required=False)
     search_type = serializers.CharField(required=False)
     search_name = serializers.CharField(required=False)
+    content_branch = serializers.ChoiceField(
+        required=False,
+        default="published_preferred",
+        choices=["draft", "published", "published_preferred"],
+    )
 
 
 class UnitContentsQuerySerializer(serializers.Serializer, CourseIdSerializerMixin, UsageKeySerializerMixin):
     course_id = serializers.CharField()
     vertical_id = serializers.CharField()
+    content_branch = serializers.ChoiceField(
+        required=False,
+        default="published_preferred",
+        choices=["draft", "published", "published_preferred"],
+    )
 
 
 class HtmlContentRequestSerializer(serializers.Serializer, UsageKeySerializerMixin):

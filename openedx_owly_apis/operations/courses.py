@@ -33,6 +33,17 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
+def _resolve_content_branch_sequence(selection: str):
+    if selection == "draft":
+        return [("draft", ModuleStoreEnum.Branch.draft_preferred)]
+    if selection == "published":
+        return [("published", ModuleStoreEnum.Branch.published_only)]
+    return [
+        ("published", ModuleStoreEnum.Branch.published_only),
+        ("draft", ModuleStoreEnum.Branch.draft_preferred),
+    ]
+
+
 def get_course_tree_logic(
     course_id: str,
     starting_block_id: str = None,
@@ -40,6 +51,7 @@ def get_course_tree_logic(
     search_id: str = None,
     search_type: str = None,
     search_name: str = None,
+    content_branch: str = "published_preferred",
     user_identifier=None,
 ) -> dict:
     """
@@ -76,13 +88,14 @@ def get_course_tree_logic(
 
         logger.info(
             "get_course_tree start course_id=%s starting_block_id=%s depth=%s "
-            "search_id=%s search_type=%s search_name=%s user=%s",
+            "search_id=%s search_type=%s search_name=%s content_branch=%s user=%s",
             course_id,
             starting_block_id,
             depth,
             search_id,
             search_type,
             search_name,
+            content_branch,
             str(user_identifier),
         )
 
@@ -103,30 +116,24 @@ def get_course_tree_logic(
             course_key = CourseKey.from_string(clean_course_id)
             logger.info("Parsed course_key: %s", course_key)
 
-            # Verify course exists in modulestore (try both draft and published)
+            # Verify course exists in modulestore using the requested branch strategy.
             from xmodule.modulestore import ModuleStoreEnum
             from xmodule.modulestore.django import modulestore
 
-            # First try draft store (Studio/CMS courses)
             store = modulestore()
             course = None
 
             try:
-                # Try draft branch first (Studio courses)
-                with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
-                    course = store.get_course(course_key)
+                for branch_name, branch in _resolve_content_branch_sequence(content_branch):
+                    with store.branch_setting(branch):
+                        course = store.get_course(course_key)
                     if course:
-                        logger.info("Course found in modulestore: %s", course.display_name)
-                    else:
-                        # Try published branch (LMS courses)
-                        with store.branch_setting(ModuleStoreEnum.Branch.published_only):
-                            course = store.get_course(course_key)
-                            if course:
-                                logger.info("Course found in modulestore: %s", course.display_name)
-                                logger.info(
-                                    "Course found in published modulestore: %s",
-                                    course.display_name,
-                                )
+                        logger.info(
+                            "Course found in %s modulestore: %s",
+                            branch_name,
+                            course.display_name,
+                        )
+                        break
 
                 if not course:
                     return {
@@ -261,17 +268,14 @@ def get_course_tree_logic(
                 "acting_user": getattr(_get_acting_user(user_identifier), 'username', None),
             }
 
-            # Try DRAFT first
-            with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
-                tree = _build_modulestore_tree(store, starting_block_usage_key, depth)
-                debug_meta["branch_used"] = "draft_preferred"
-            # If draft tree is empty/None, try PUBLISHED
-            if not tree or (isinstance(tree, dict) and not tree.get('children') and tree.get('type') != 'course'):
-                with store.branch_setting(ModuleStoreEnum.Branch.published_only):
-                    tree_p = _build_modulestore_tree(store, starting_block_usage_key, depth)
-                    if tree_p:
-                        tree = tree_p
-                        debug_meta["branch_used"] = "published_only"
+            tree = None
+            for branch_name, branch in _resolve_content_branch_sequence(content_branch):
+                with store.branch_setting(branch):
+                    candidate_tree = _build_modulestore_tree(store, starting_block_usage_key, depth)
+                if candidate_tree:
+                    tree = candidate_tree
+                    debug_meta["branch_used"] = branch_name
+                    break
 
             if tree:
                 response = {
@@ -297,15 +301,23 @@ def get_course_tree_logic(
         except Exception as ms_err:
             logger.warning("Modulestore traversal failed, falling back to course_blocks API: %s", ms_err)
 
-        # Get course blocks structure with cache recovery
-        # Use draft branch for Studio courses
+        # Get course blocks structure with cache recovery.
         try:
-            with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
-                blocks = get_course_blocks(
-                    user=acting_user,
-                    starting_block_usage_key=starting_block_usage_key,
-                    transformers=[],  # CMS-first: show draft/unpublished content (no default transformers)
-                )
+            blocks = None
+            for branch_name, branch in _resolve_content_branch_sequence(content_branch):
+                with store.branch_setting(branch):
+                    blocks = get_course_blocks(
+                        user=acting_user,
+                        starting_block_usage_key=starting_block_usage_key,
+                        transformers=[],
+                    )
+                if blocks:
+                    logger.info(
+                        "Successfully retrieved course blocks for %s using %s branch",
+                        starting_block_usage_key,
+                        branch_name,
+                    )
+                    break
             logger.info(
                 "Successfully retrieved course blocks for %s",
                 starting_block_usage_key,
@@ -334,12 +346,16 @@ def get_course_tree_logic(
                     clear_course_from_cache(course_key)
                     logger.info("Cleared block structure cache for %s", course_key)
                     # Try again after clearing cache
-                    with store.branch_setting(ModuleStoreEnum.Branch.draft_preferred):
-                        blocks = get_course_blocks(
-                            user=acting_user,
-                            starting_block_usage_key=starting_block_usage_key,
-                            transformers=[],  # CMS-first: show draft/unpublished content after cache recovery
-                        )
+                    blocks = None
+                    for _, branch in _resolve_content_branch_sequence(content_branch):
+                        with store.branch_setting(branch):
+                            blocks = get_course_blocks(
+                                user=acting_user,
+                                starting_block_usage_key=starting_block_usage_key,
+                                transformers=[],
+                            )
+                        if blocks:
+                            break
                     logger.info(
                         "Successfully retrieved course blocks after cache clear for %s",
                         starting_block_usage_key,
@@ -5265,7 +5281,12 @@ def delete_cohort_logic(course_id: str, cohort_id: int, user_identifier=None) ->
         }
 
 
-def get_vertical_contents_logic(course_id: str, vertical_id: str, user_identifier=None) -> dict:
+def get_vertical_contents_logic(
+    course_id: str,
+    vertical_id: str,
+    content_branch: str = "published_preferred",
+    user_identifier=None,
+) -> dict:
     try:
         from opaque_keys.edx.keys import CourseKey, UsageKey
         from xmodule.modulestore import ModuleStoreEnum
@@ -5293,17 +5314,21 @@ def get_vertical_contents_logic(course_id: str, vertical_id: str, user_identifie
             return {"success": False, "error": {str(e)}}
 
         store = modulestore()
-        # Only retrieve from published branch (exclude draft)
-        with store.branch_setting(ModuleStoreEnum.Branch.published_only):
-            try:
-                vertical_item = store.get_item(vertical_key)
-            except Exception:
-                vertical_item = None
+        vertical_item = None
+
+        for _, branch in _resolve_content_branch_sequence(content_branch):
+            with store.branch_setting(branch):
+                try:
+                    vertical_item = store.get_item(vertical_key)
+                except Exception:
+                    vertical_item = None
+            if vertical_item:
+                break
         if not vertical_item:
             return {
                 "success": False,
                 "error": "vertical_not_found",
-                "message": f"Vertical not found in published modulestore: {vertical_id}",
+                "message": f"Vertical not found in selected modulestore branches: {vertical_id}",
                 "cleaned_course_id": clean_course_id,
             }
 
@@ -5335,24 +5360,28 @@ def get_vertical_contents_logic(course_id: str, vertical_id: str, user_identifie
             return data
 
         results = []
-        # Fetch children only from published branch
-        with store.branch_setting(ModuleStoreEnum.Branch.published_only):
-            for child_key in children:
-                try:
-                    child = store.get_item(child_key)
-                except Exception:
-                    child = None
-                if not child:
-                    continue
-                child_type = getattr(child.location, 'block_type', getattr(child, 'category', 'unknown'))
-                entry = {
-                    'id': str(child.location),
-                    'type': child_type,
-                    'display_name': getattr(child, 'display_name', ''),
-                    'graded': getattr(child, 'graded', None),
-                    'content': _extract_content(child),
-                }
-                results.append(entry)
+        for child_key in children:
+            child = None
+            for _, branch in _resolve_content_branch_sequence(content_branch):
+                with store.branch_setting(branch):
+                    try:
+                        child = store.get_item(child_key)
+                    except Exception:
+                        child = None
+                if child:
+                    break
+
+            if not child:
+                continue
+            child_type = getattr(child.location, 'block_type', getattr(child, 'category', 'unknown'))
+            entry = {
+                'id': str(child.location),
+                'type': child_type,
+                'display_name': getattr(child, 'display_name', ''),
+                'graded': getattr(child, 'graded', None),
+                'content': _extract_content(child),
+            }
+            results.append(entry)
 
         return {
             "success": True,
