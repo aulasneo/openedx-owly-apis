@@ -191,6 +191,12 @@ class PublishContentRequestSerializer(serializers.Serializer, UsageKeySerializer
         default="auto",
     )
 
+    def validate_content_id(self, value):
+        try:
+            return validate_course_id(value)
+        except serializers.ValidationError:
+            return _validate_usage_key(value)
+
 
 class DeleteXBlockRequestSerializer(serializers.Serializer, UsageKeySerializerMixin):
     block_id = serializers.CharField()
