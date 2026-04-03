@@ -1221,6 +1221,26 @@ class TestOpenedXCourseViewSet:
         assert resp.data["course_id"] == "course-v1:ORG+NUM+RUN"
         assert resp.data["job_id"]
 
+    def test_publish_content_accepts_course_key(self, api_factory):
+        from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
+
+        view = OpenedXCourseViewSet.as_view({"post": "publish_content"})
+        req = api_factory.post(
+            "/owly-courses/content/publish/",
+            {
+                "content_id": "course-v1:ORG+NUM+RUN",
+                "publish_type": "course",
+            },
+            format="json",
+        )
+        user = _auth_user(is_course_staff=True)
+        force_authenticate(req, user=user)
+        resp = view(req)
+
+        assert resp.status_code == 200
+        assert resp.data["called"] == "publish_content_logic"
+        assert resp.data["kwargs"]["content_id"] == "course-v1:ORG+NUM+RUN"
+
     def test_get_publish_content_job_returns_cached_job(self, api_factory):
         from openedx_owly_apis.publish_jobs import create_publish_content_job, update_publish_content_job
         from openedx_owly_apis.views.v1.courses import OpenedXCourseViewSet
