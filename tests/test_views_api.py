@@ -198,7 +198,7 @@ class TestOpenedXCourseViewSet:
         view = OpenedXCourseViewSet.as_view({"post": "add_video_content"})
         req = api_factory.post(
             "/owly-courses/content/video/",
-            {"vertical_id": "block-v1:ORG+NUM+RUN+type@vertical+block@v1", "video_config": {"url": "http://v"}},
+            {"vertical_id": "block-v1:ORG+NUM+RUN+type@vertical+block@v1", "video_config": {"video_url": "http://v"}},
             format="json",
         )
         user = _auth_user()
