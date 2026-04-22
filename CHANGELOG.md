@@ -4,9 +4,9 @@ All enhancements and patches to `openedx_owly_apis` are documented in this file.
 This project follows [Keep a Changelog](https://keepachangelog.com/) and
 [Semantic Versioning](https://semver.org/).
 
-There should always be an `Unreleased` section for changes pending release.
+There should always be an `Version 3.0.0 (2026-04-22)` section for changes pending release.
 
-## Unreleased
+## Version 3.0.0 (2026-04-22)
 
 ### Added
 
