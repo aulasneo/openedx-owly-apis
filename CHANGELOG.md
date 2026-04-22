@@ -4,8 +4,22 @@ All enhancements and patches to `openedx_owly_apis` are documented in this file.
 This project follows [Keep a Changelog](https://keepachangelog.com/) and
 [Semantic Versioning](https://semver.org/).
 
-There should always be a `Version 1.4.0 (2025-10-22)` section for changes
-pending release.
+There should always be an `Unreleased` section for changes pending release.
+
+## Unreleased
+
+### Added
+
+- Add optional `content_branch` selection to the course tree and unit contents
+  APIs so callers can choose `draft`, `published`, or `published_preferred`
+  lookups.
+- Allow the publish content API to accept course keys in addition to usage
+  keys.
+
+### Changed
+
+- Update the plugin for Ulmo compatibility, including the Studio certificate
+  manager import path and cohort group fallback handling.
 
 ## Version 2.1.1 (2026-03-31)
 
