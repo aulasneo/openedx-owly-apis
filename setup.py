@@ -77,10 +77,10 @@ def load_requirements(*requirements_paths):
             # It's fine to add constraints to an unconstrained package,
             # but raise an error if there are already constraints in place.
             if existing_version_constraints and existing_version_constraints != version_constraints:
-                raise BaseException(f'Multiple constraint definitions found for {package}:'
+                raise BaseException(f'Multiple constraint definitions found for {package}: '
                                     f' "{existing_version_constraints}" and "{version_constraints}".'
                                     f'Combine constraints into one location with {package}'
-                                    f'{existing_version_constraints},{version_constraints}.')
+                                    f'{existing_version_constraints}, {version_constraints}.')
             if add_if_not_present or package in current_requirements:
                 current_requirements[package] = version_constraints
 

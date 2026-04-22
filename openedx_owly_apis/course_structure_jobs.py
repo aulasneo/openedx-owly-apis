@@ -10,7 +10,7 @@ JOB_CACHE_TIMEOUT_SECONDS = 60 * 60
 
 
 def _job_cache_key(job_id):
-    return f"{JOB_CACHE_KEY_PREFIX}:{job_id}"
+    return "{}:{}".format(JOB_CACHE_KEY_PREFIX, job_id)
 
 
 def _timestamp():

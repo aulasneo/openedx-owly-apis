@@ -4,6 +4,7 @@ Tools Layer - MCP tools for OpenedX
 import json
 import logging
 import re
+import textwrap
 from datetime import datetime, timedelta
 
 from asgiref.sync import sync_to_async
@@ -139,7 +140,7 @@ def get_course_tree_logic(
                     return {
                         "success": False,
                         "error": "course_not_found",
-                        "message": f"Course not found in any modulestore branch: {clean_course_id}",
+                        "message": f"Course unavailable across modulestore branches: {clean_course_id}",
                         "original_course_id": course_id,
                         "cleaned_course_id": clean_course_id
                     }
@@ -154,7 +155,7 @@ def get_course_tree_logic(
                     "success": False,
                     "error": "course_not_in_modulestore",
                     "message": (
-                        f"Course not found in modulestore: {clean_course_id}. "
+                        f"Course unavailable in modulestore: {clean_course_id}. "
                         f"Error: {str(store_error)}"
                     ),
                     "original_course_id": course_id,
@@ -598,7 +599,7 @@ def _validate_vertical_id(vertical_id):
             "error": "invalid_vertical_id_format",
             "message": (
                 f"vertical_id must be a full UsageKey (e.g., "
-                f"block-v1:ORG+NUM+RUN+type@vertical+block@GUID). Got: {vertical_id}"
+                "block-v1:ORG+NUM+RUN+type@vertical+block@GUID). Got: {}".format(vertical_id)
             ),
         }
 
@@ -1197,16 +1198,23 @@ def add_problem_content_logic(vertical_id: str, problem_config: dict, user_ident
             choices_xml = ''
             for option in options:
                 is_correct = 'true' if option == correct_answer else 'false'
-                choices_xml += f'<choice correct="{is_correct}">{option}</choice>\n                    '
+                choices_xml += '<choice correct="{0}">{1}</choice>\n                    '.format(
+                    is_correct,
+                    option,
+                )
 
-            problem_xml = f'''<problem>
-<multiplechoiceresponse>
-    <label>{question}</label>
-    <choicegroup>
-        {choices_xml.strip()}
-    </choicegroup>
-</multiplechoiceresponse>
-</problem>'''
+            problem_xml = textwrap.dedent(
+                """
+                <problem>
+                <multiplechoiceresponse>
+                    <label>{question}</label>
+                    <choicegroup>
+                        {choices_xml}
+                    </choicegroup>
+                </multiplechoiceresponse>
+                </problem>
+                """
+            ).format(question=question, choices_xml=choices_xml.strip()).strip()
 
             component.data = problem_xml
 
@@ -1268,7 +1276,7 @@ def add_video_content_logic(vertical_id: str, video_config: dict, user_identifie
         if 'video_url' in video_config:
             video_url = video_config['video_url']
             # Para videos no-YouTube, usar html5_sources
-            if not ('youtube.com' in video_url or 'youtu.be' in video_url):
+            if 'youtube.com' not in video_url and 'youtu.be' not in video_url:
                 component.html5_sources = [video_url]
             else:
                 # Extraer YouTube ID si es un enlace de YouTube
@@ -2132,10 +2140,14 @@ def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
     display_name = escape_xml(display_name)
     question_text = escape_xml(question_text)
 
-    xml = f'''<problem display_name="{display_name}">
-    <multiplechoiceresponse>
-        <p>{question_text}</p>
-        <choicegroup type="MultipleChoice">'''
+    xml = textwrap.dedent(
+        """
+        <problem display_name="{display_name}">
+        <multiplechoiceresponse>
+            <p>{question_text}</p>
+            <choicegroup type="MultipleChoice">
+        """
+    ).format(display_name=display_name, question_text=question_text).strip()
 
     for choice in choices:
         if isinstance(choice, dict):
@@ -2146,23 +2158,26 @@ def _generate_multiple_choice_xml(problem_data: dict, display_name: str) -> str:
             choice_text = escape_xml(str(choice_text))
             # ALWAYS include correct attribute - OpenedX requires it on ALL choices
             correct = 'correct="true"' if choice.get('correct', False) else 'correct="false"'
-            xml += f'\n            <choice {correct}>{choice_text}</choice>'
+            xml += '\n            <choice {0}>{1}</choice>'.format(correct, choice_text)
         elif isinstance(choice, str):
             # Handle string choices (assume first one is correct by default)
             choice_text = escape_xml(str(choice) if choice is not None else '')
             # ALWAYS include correct attribute - OpenedX requires it on ALL choices
             correct = 'correct="true"' if choices.index(choice) == 0 else 'correct="false"'
-            xml += f'\n            <choice {correct}>{choice_text}</choice>'
+            xml += '\n            <choice {0}>{1}</choice>'.format(correct, choice_text)
         else:
             # Handle any other type by converting to string
             choice_text = escape_xml(str(choice) if choice is not None else '')
             # ALWAYS include correct attribute - OpenedX requires it on ALL choices
-            xml += f'\n            <choice correct="false">{choice_text}</choice>'
+            xml += '\n            <choice correct="false">{0}</choice>'.format(choice_text)
 
-    xml += '''
-        </choicegroup>
-    </multiplechoiceresponse>
-</problem>'''
+    xml += textwrap.dedent(
+        """
+                </choicegroup>
+            </multiplechoiceresponse>
+        </problem>
+        """
+    ).rstrip()
 
     return xml
 
@@ -2199,13 +2214,22 @@ def _generate_numerical_xml(problem_data: dict, display_name: str) -> str:
     correct_answer = escape_xml(correct_answer)
     tolerance = escape_xml(tolerance)
 
-    xml = f'''<problem display_name="{display_name}">
-    <numericalresponse answer="{correct_answer}">
-        <p>{question_text}</p>
-        <responseparam type="tolerance" default="{tolerance}"/>
-        <textline size="20"/>
-    </numericalresponse>
-</problem>'''
+    xml = textwrap.dedent(
+        """
+        <problem display_name="{display_name}">
+        <numericalresponse answer="{correct_answer}">
+            <p>{question_text}</p>
+            <responseparam type="tolerance" default="{tolerance}"/>
+            <textline size="20"/>
+        </numericalresponse>
+        </problem>
+        """
+    ).format(
+        display_name=display_name,
+        correct_answer=correct_answer,
+        question_text=question_text,
+        tolerance=tolerance,
+    ).strip()
 
     return xml
 
@@ -2241,12 +2265,21 @@ def _generate_string_response_xml(problem_data: dict, display_name: str) -> str:
 
     type_attr = 'type="ci"' if not case_sensitive else ''
 
-    xml = f'''<problem display_name="{display_name}">
-    <stringresponse answer="{correct_answer}" {type_attr}>
-        <p>{question_text}</p>
-        <textline size="20"/>
-    </stringresponse>
-</problem>'''
+    xml = textwrap.dedent(
+        """
+        <problem display_name="{display_name}">
+        <stringresponse answer="{correct_answer}" {type_attr}>
+            <p>{question_text}</p>
+            <textline size="20"/>
+        </stringresponse>
+        </problem>
+        """
+    ).format(
+        display_name=display_name,
+        correct_answer=correct_answer,
+        type_attr=type_attr,
+        question_text=question_text,
+    ).strip()
 
     return xml
 
@@ -2289,10 +2322,14 @@ def _generate_choice_response_xml(problem_data: dict, display_name: str) -> str:
     display_name = escape_xml(display_name)
     question_text = escape_xml(question_text)
 
-    xml = f'''<problem display_name="{display_name}">
-    <choiceresponse>
-        <p>{question_text}</p>
-        <checkboxgroup>'''
+    xml = textwrap.dedent(
+        """
+        <problem display_name="{display_name}">
+        <choiceresponse>
+            <p>{question_text}</p>
+            <checkboxgroup>
+        """
+    ).format(display_name=display_name, question_text=question_text).strip()
 
     for choice in choices:
         if isinstance(choice, dict):
@@ -2302,21 +2339,24 @@ def _generate_choice_response_xml(problem_data: dict, display_name: str) -> str:
                 choice_text = ''
             choice_text = escape_xml(str(choice_text))
             correct = 'correct="true"' if choice.get('correct', False) else 'correct="false"'
-            xml += f'\n            <choice {correct}>{choice_text}</choice>'
+            xml += '\n            <choice {0}>{1}</choice>'.format(correct, choice_text)
         elif isinstance(choice, str):
             # Handle string choices (assume first one is correct by default)
             choice_text = escape_xml(str(choice) if choice is not None else '')
             correct = 'correct="true"' if choices.index(choice) == 0 else 'correct="false"'
-            xml += f'\n            <choice {correct}>{choice_text}</choice>'
+            xml += '\n            <choice {0}>{1}</choice>'.format(correct, choice_text)
         else:
             # Handle any other type by converting to string
             choice_text = escape_xml(str(choice) if choice is not None else '')
-            xml += f'\n            <choice correct="false">{choice_text}</choice>'
+            xml += '\n            <choice correct="false">{0}</choice>'.format(choice_text)
 
-    xml += '''
-        </checkboxgroup>
-    </choiceresponse>
-</problem>'''
+    xml += textwrap.dedent(
+        """
+                </checkboxgroup>
+            </choiceresponse>
+        </problem>
+        """
+    ).rstrip()
 
     return xml
 
@@ -2344,10 +2384,14 @@ def _generate_generic_problem_xml(problem_data: dict, display_name: str) -> str:
     display_name = escape_xml(display_name)
     question_text = escape_xml(question_text)
 
-    xml = f'''<problem display_name="{display_name}">
-    <p>{question_text}</p>
-    <p>This is a generic problem. Please customize the XML as needed.</p>
-</problem>'''
+    xml = textwrap.dedent(
+        """
+        <problem display_name="{display_name}">
+        <p>{question_text}</p>
+        <p>This is a generic problem. Please customize the XML as needed.</p>
+        </problem>
+        """
+    ).format(display_name=display_name, question_text=question_text).strip()
 
     return xml
 
@@ -2411,10 +2455,14 @@ def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
     display_name = escape_xml(display_name)
     question_text = escape_xml(question_text)
 
-    xml = f'''<problem display_name="{display_name}">
-    <optionresponse>
-        <p>{question_text}</p>
-        <optioninput>'''
+    xml = textwrap.dedent(
+        """
+        <problem display_name="{display_name}">
+        <optionresponse>
+            <p>{question_text}</p>
+            <optioninput>
+        """
+    ).format(display_name=display_name, question_text=question_text).strip()
 
     # Add options to dropdown
     for choice in choices:
@@ -2426,23 +2474,26 @@ def _generate_dropdown_xml(problem_data: dict, display_name: str) -> str:
             choice_text = escape_xml(str(choice_text))
             # ALWAYS include correct attribute - OpenedX requires it on ALL options
             correct_attr = ' correct="True"' if choice.get('correct', False) else ' correct="False"'
-            xml += f'\n            <option{correct_attr}>{choice_text}</option>'
+            xml += '\n            <option{0}>{1}</option>'.format(correct_attr, choice_text)
         elif isinstance(choice, str):
             # Handle string choices (assume first one is correct by default)
             choice_text = escape_xml(str(choice) if choice is not None else '')
             # ALWAYS include correct attribute - OpenedX requires it on ALL options
             correct_attr = ' correct="True"' if choices.index(choice) == 0 else ' correct="False"'
-            xml += f'\n            <option{correct_attr}>{choice_text}</option>'
+            xml += '\n            <option{0}>{1}</option>'.format(correct_attr, choice_text)
         else:
             # Handle any other type by converting to string
             choice_text = escape_xml(str(choice) if choice is not None else '')
             # ALWAYS include correct attribute - OpenedX requires it on ALL options
-            xml += f'\n            <option correct="False">{choice_text}</option>'
+            xml += '\n            <option correct="False">{0}</option>'.format(choice_text)
 
-    xml += '''
-        </optioninput>
-    </optionresponse>
-</problem>'''
+    xml += textwrap.dedent(
+        """
+                </optioninput>
+            </optionresponse>
+        </problem>
+        """
+    ).rstrip()
 
     return xml
 
@@ -3350,9 +3401,11 @@ def list_course_staff_logic(course_id, role_type=None, acting_user_identifier=No
             return {
                 "success": False,
                 "error": "invalid_course_id",
-                "message": f"Invalid course_id format. Expected format: 'course-v1:ORG+COURSE+RUN'. "
-                           f"Received: '{course_id}'. Error: {str(e)}. "
-                           f"Note: The API automatically handles URL encoding/decoding."
+                "message": (
+                    "Invalid course_id format. Expected format: 'course-v1:ORG+COURSE+RUN'. "
+                    "Received: '{course_id}'. Error: {error}. "
+                    "Note: The API automatically handles URL encoding/decoding."
+                ).format(course_id=course_id, error=str(e))
             }
 
         User = get_user_model()
@@ -4379,9 +4432,9 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
             # Validate it looks like a proper UsageKey format
             if not cleaned.startswith('block-v1:') or '+type@' not in cleaned:
                 raise ValueError(
-                    f"Invalid UsageKey format. "
-                    f"Expected: block-v1:ORG+COURSE+RUN+type@openassessment+block@ID "
-                    f"Received: {cleaned}"
+                    "Invalid UsageKey format. "
+                    "Expected: block-v1:ORG+COURSE+RUN+type@openassessment+block@ID "
+                    "Received: {}".format(cleaned)
                 )
 
             key = UsageKey.from_string(cleaned)
@@ -4389,8 +4442,8 @@ def get_ora_details_logic(ora_location: str, user_identifier=None) -> dict:
             if not hasattr(key, 'course_key'):
                 raise ValueError(
                     "Received a BlockKey without course context. "
-                    f"Expected: block-v1:ORG+COURSE+RUN+type@openassessment+block@ID "
-                    f"Received: {cleaned}"
+                    "Expected: block-v1:ORG+COURSE+RUN+type@openassessment+block@ID "
+                    "Received: {}".format(cleaned)
                 )
             return key
 
@@ -4853,7 +4906,7 @@ def add_user_to_cohort_logic(course_id: str, cohort_id: int, user_identifier_to_
             return {
                 "success": False,
                 "error": "cohort_not_found",
-                "message": f"Cohort with ID {cohort_id} not found in course {course_id}"
+                "message": f"Cohort with ID {cohort_id} is missing from course {course_id}"
             }
 
         # Add user to cohort (captures previous cohort info)
@@ -4993,7 +5046,7 @@ def remove_user_from_cohort_logic(
             return {
                 "success": False,
                 "error": "cohort_not_found",
-                "message": f"Cohort with ID {cohort_id} not found in course {course_id}"
+                "message": f"Cohort with ID {cohort_id} is missing from course {course_id}"
             }
 
         # Remove user from cohort
@@ -5109,7 +5162,7 @@ def list_cohort_members_logic(course_id: str, cohort_id: int, user_identifier=No
             return {
                 "success": False,
                 "error": "cohort_not_found",
-                "message": f"Cohort with ID {cohort_id} not found in course {course_id}"
+                "message": f"Cohort with ID {cohort_id} is missing from course {course_id}"
             }
 
         # Import enrollment model
@@ -5328,7 +5381,7 @@ def get_vertical_contents_logic(
             return {
                 "success": False,
                 "error": "vertical_not_found",
-                "message": f"Vertical not found in selected modulestore branches: {vertical_id}",
+                "message": f"Vertical not found under selected modulestore branches: {vertical_id}",
                 "cleaned_course_id": clean_course_id,
             }
 

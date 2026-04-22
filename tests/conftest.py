@@ -81,7 +81,7 @@ def stub_openedx_modules():  # pylint: disable=too-many-statements
             if raw and ":" in raw:
                 try:
                     course_part = raw.split(":", 1)[1].split("+type@", 1)[0]
-                    self.course_key = _CourseKey(f"course-v1:{course_part}")
+                    self.course_key = _CourseKey("course-v1:" + course_part)
                 except Exception:  # pragma: no cover  # pylint: disable=broad-exception-caught
                     self.course_key = None
     mod.CourseKey = _CourseKey
