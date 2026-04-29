@@ -3,6 +3,7 @@ import pytest
 from openedx_owly_apis.views.v1 import serializers as v1_serializers
 from openedx_owly_apis.views.v1.serializers import (
     CourseStructureRequestSerializer,
+    CourseTreeQuerySerializer,
     CreateProblemComponentRequestSerializer,
 )
 
@@ -86,3 +87,15 @@ def test_create_problem_component_serializer_rejects_unknown_problem_shape():
     assert not serializer.is_valid()
     assert "problem_data" in serializer.errors
     assert "question" in serializer.errors["problem_data"]
+
+
+def test_course_tree_query_serializer_accepts_raw_search_id():
+    serializer = CourseTreeQuerySerializer(
+        data={
+            "course_id": "course-v1:TestX+CS101+2024",
+            "search_id": "28fad18301bb4d8ebac28249c5a8c803",
+        }
+    )
+
+    assert serializer.is_valid(), serializer.errors
+    assert serializer.validated_data["search_id"] == "28fad18301bb4d8ebac28249c5a8c803"

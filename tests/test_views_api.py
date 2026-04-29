@@ -273,7 +273,10 @@ class TestOpenedXCourseViewSet:
         view = OpenedXCourseViewSet.as_view({"post": "control_unit_availability"})
         req = api_factory.post(
             "/owly-courses/units/availability/control/",
-            {"unit_id": "block-v1:ORG+NUM+RUN+type@sequential+block@u1", "availability_config": {"due": "2024-01-31"}},
+            {
+                "unit_id": "block-v1:ORG+NUM+RUN+type@sequential+block@0123456789abcdef0123456789abcdef",
+                "availability_config": {"due_date": "2024-01-31"},
+            },
             format="json",
         )
         user = _auth_user()

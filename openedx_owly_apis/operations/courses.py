@@ -34,6 +34,34 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
+def _extract_block_reference(block_identifier: str | None) -> str | None:
+    if not block_identifier:
+        return None
+
+    block_identifier = str(block_identifier).strip()
+    if not block_identifier:
+        return None
+
+    marker = "block@"
+    if marker in block_identifier:
+        return block_identifier.split(marker, 1)[1]
+    return block_identifier
+
+
+def _matches_block_identifier(search_identifier: str | None, block_identifier: str | None) -> bool:
+    if not search_identifier:
+        return True
+    if not block_identifier:
+        return False
+
+    normalized_search = str(search_identifier).strip()
+    normalized_block = str(block_identifier).strip()
+    if normalized_search == normalized_block:
+        return True
+
+    return _extract_block_reference(normalized_search) == _extract_block_reference(normalized_block)
+
+
 def _resolve_content_branch_sequence(selection: str):
     if selection == "draft":
         return [("draft", ModuleStoreEnum.Branch.draft_preferred)]
@@ -237,7 +265,7 @@ def get_course_tree_logic(
                 ntype = n.get('type', '')
                 nname = n.get('display_name', '') or ''
                 ok = True
-                if search_id and nid != search_id:
+                if search_id and not _matches_block_identifier(search_id, nid):
                     ok = False
                 if ok and search_type and ntype != search_type:
                     ok = False
@@ -400,8 +428,6 @@ def get_course_tree_logic(
         has_search = search_id or search_type or search_name
 
         if has_search:
-            import re
-
             # Compile regex pattern for name search if provided
             name_pattern = None
             if search_name:
@@ -424,7 +450,7 @@ def get_course_tree_logic(
                 matches = True
 
                 # Exact ID match
-                if search_id and search_id != block_id:
+                if search_id and not _matches_block_identifier(search_id, block_id):
                     matches = False
 
                 # Exact type match
@@ -1851,6 +1877,8 @@ def control_unit_availability_logic(unit_id: str, availability_config: dict, use
 
         # Configure availability settings
         updated_settings = []
+        course = None
+        gating_api = None
 
         if not availability_config:
             return {
@@ -1870,6 +1898,52 @@ def control_unit_availability_logic(unit_id: str, availability_config: dict, use
             except ValueError as e:
                 logger.warning(f"Invalid datetime format: {date_str}, error: {e}")
                 return None
+
+        def _format_datetime(value):
+            return value.isoformat() if value else None
+
+        def _build_current_config():
+            current_config = {
+                "start_date": _format_datetime(getattr(unit, 'start', None)),
+                "due_date": _format_datetime(getattr(unit, 'due', None)),
+                "visible_to_staff_only": getattr(unit, 'visible_to_staff_only', False),
+                "graded": (
+                    getattr(unit, 'graded', False)
+                    if getattr(unit, 'category', None) == 'sequential'
+                    else None
+                ),
+                "format": (
+                    getattr(unit, 'format', None)
+                    if getattr(unit, 'category', None) == 'sequential'
+                    else None
+                ),
+                "hide_after_due": (
+                    getattr(unit, 'hide_after_due', False)
+                    if getattr(unit, 'category', None) == 'sequential'
+                    else None
+                ),
+            }
+            if course is not None:
+                current_config["enable_subsection_gating"] = getattr(
+                    course, 'enable_subsection_gating', False
+                )
+            if gating_api is not None and getattr(unit, 'category', None) == 'sequential':
+                prereq_key, min_grade, min_completion = gating_api.get_required_content(
+                    unit_key.course_key,
+                    unit.location,
+                )
+                current_config["gating_config"] = {
+                    "enable_subsection_gating": (
+                        getattr(course, 'enable_subsection_gating', False)
+                        if course is not None
+                        else None
+                    ),
+                    "gated": bool(prereq_key),
+                    "gating_prerequisite": prereq_key,
+                    "gating_min_grade": min_grade,
+                    "gating_min_completion": min_completion,
+                }
+            return current_config
 
         # Set start date (when unit becomes available)
         if 'start_date' in availability_config:
@@ -1916,6 +1990,137 @@ def control_unit_availability_logic(unit_id: str, availability_config: dict, use
             updated_settings.append('hide_after_due')
             logger.info(f"Set hide after due: {hide_after_due}")
 
+        if 'gating_config' in availability_config:
+            gating_config = availability_config.get('gating_config') or {}
+            if not isinstance(gating_config, dict):
+                return {
+                    "success": False,
+                    "error": "invalid_gating_config",
+                    "message": "gating_config must be a dictionary",
+                    "unit_id": unit_id,
+                }
+
+            from openedx.core.lib.gating import api as gating_api_module
+            gating_api = gating_api_module
+            course = store.get_course(unit_key.course_key)
+
+            if course is None:
+                return {
+                    "success": False,
+                    "error": "course_not_found",
+                    "message": f"Course not found for unit: {unit_id}",
+                    "unit_id": unit_id,
+                }
+
+            if 'enable_subsection_gating' in gating_config:
+                enable_subsection_gating = bool(gating_config['enable_subsection_gating'])
+                course.enable_subsection_gating = enable_subsection_gating
+                store.update_item(course, acting_user.id)
+                updated_settings.append('enable_subsection_gating')
+                logger.info("Set enable_subsection_gating: %s", enable_subsection_gating)
+
+            requires_gating_update = any(
+                key in gating_config
+                for key in ('gated', 'gating_prerequisite', 'gating_min_grade', 'gating_min_completion')
+            )
+
+            if requires_gating_update:
+                if getattr(unit, 'category', None) != 'sequential':
+                    return {
+                        "success": False,
+                        "error": "invalid_gating_unit_type",
+                        "message": "Subsection gating can only be configured on sequential blocks",
+                        "unit_id": unit_id,
+                        "unit_type": getattr(unit, 'category', None),
+                    }
+
+                gated = bool(gating_config.get('gated', True))
+                if gated:
+                    if not getattr(course, 'enable_subsection_gating', False):
+                        course.enable_subsection_gating = True
+                        store.update_item(course, acting_user.id)
+                        if 'enable_subsection_gating' not in updated_settings:
+                            updated_settings.append('enable_subsection_gating')
+                        logger.info("Enabled subsection gating for course %s", unit_key.course_key)
+
+                    prereq_raw = gating_config.get('gating_prerequisite')
+                    if not prereq_raw:
+                        return {
+                            "success": False,
+                            "error": "missing_gating_prerequisite",
+                            "message": "gating_prerequisite is required when gated is true",
+                            "unit_id": unit_id,
+                        }
+
+                    try:
+                        prereq_key = UsageKey.from_string(str(prereq_raw))
+                    except Exception:
+                        return {
+                            "success": False,
+                            "error": "invalid_gating_prerequisite",
+                            "message": f"Invalid gating_prerequisite format: {prereq_raw}",
+                            "unit_id": unit_id,
+                        }
+
+                    if str(prereq_key.course_key) != str(unit_key.course_key):
+                        return {
+                            "success": False,
+                            "error": "gating_prerequisite_course_mismatch",
+                            "message": "gating_prerequisite must belong to the same course as unit_id",
+                            "unit_id": unit_id,
+                            "gating_prerequisite": str(prereq_raw),
+                        }
+
+                    prereq_unit = store.get_item(prereq_key)
+                    if prereq_unit is None:
+                        return {
+                            "success": False,
+                            "error": "gating_prerequisite_not_found",
+                            "message": f"Gating prerequisite not found: {prereq_raw}",
+                            "unit_id": unit_id,
+                        }
+                    if getattr(prereq_unit, 'category', None) != 'sequential':
+                        return {
+                            "success": False,
+                            "error": "invalid_gating_prerequisite_type",
+                            "message": "gating_prerequisite must be a sequential block",
+                            "unit_id": unit_id,
+                            "gating_prerequisite": str(prereq_raw),
+                            "gating_prerequisite_type": getattr(prereq_unit, 'category', None),
+                        }
+
+                    if not gating_api.is_prerequisite(unit_key.course_key, str(prereq_key)):
+                        gating_api.add_prerequisite(unit_key.course_key, str(prereq_key))
+                        logger.info("Registered prerequisite subsection: %s", prereq_key)
+
+                    min_grade = gating_config.get('gating_min_grade', '')
+                    min_completion = gating_config.get('gating_min_completion', '')
+                    gating_api.set_required_content(
+                        unit_key.course_key,
+                        unit.location,
+                        str(prereq_key),
+                        min_grade,
+                        min_completion,
+                    )
+                    updated_settings.append('gating_config')
+                    logger.info(
+                        "Set gated subsection %s prerequisite=%s min_grade=%s min_completion=%s",
+                        unit.location,
+                        prereq_key,
+                        min_grade,
+                        min_completion,
+                    )
+                else:
+                    gating_api.set_required_content(
+                        unit_key.course_key,
+                        unit.location,
+                        None,
+                        None,
+                        None,
+                    )
+                    updated_settings.append('gating_config')
+                    logger.info("Removed gated subsection requirement from %s", unit.location)
+
         # Update unit with new settings
         if updated_settings:
             store.update_item(unit, acting_user.id)
@@ -1928,38 +2133,30 @@ def control_unit_availability_logic(unit_id: str, availability_config: dict, use
                 "unit_id": unit_id,
                 "unit_type": getattr(unit, 'category', None),
                 "updated_settings": updated_settings,
-                "current_config": {
-                    "start_date": getattr(unit, 'start', None).isoformat()
-                    if getattr(unit, 'start', None)
-                    else None,
-                    "due_date": (
-                        getattr(unit, 'due', None).isoformat()
-                        if getattr(unit, 'due', None)
-                        else None
-                    ),
-                    "visible_to_staff_only": getattr(unit, 'visible_to_staff_only', False),
-                    "graded": (
-                        getattr(unit, 'graded', False)
-                        if getattr(unit, 'category', None) == 'sequential'
-                        else None
-                    ),
-                    "format": (
-                        getattr(unit, 'format', None)
-                        if getattr(unit, 'category', None) == 'sequential'
-                        else None
-                    ),
-                    "hide_after_due": (
-                        getattr(unit, 'hide_after_due', False)
-                        if getattr(unit, 'category', None) == 'sequential'
-                        else None
-                    ),
-                },
+                "current_config": _build_current_config(),
                 "message": (
                     f"Successfully updated {len(updated_settings)} availability setting(s)"
                     if updated_settings
                     else "No settings to update"
                 ),
             }
+
+        return {
+            "success": False,
+            "error": "no_supported_settings",
+            "message": "No supported availability settings were provided",
+            "unit_id": unit_id,
+            "unit_type": getattr(unit, 'category', None),
+            "available_settings": [
+                "start_date",
+                "due_date",
+                "visible_to_staff_only",
+                "graded",
+                "format",
+                "hide_after_due",
+                "gating_config",
+            ],
+        }
 
     except Exception as e:
         logger.exception(f"Error controlling unit availability: {e}")

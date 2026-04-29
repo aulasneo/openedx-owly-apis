@@ -10,6 +10,17 @@ def _validate_usage_key(value: str) -> str:
     return validate_unit_id(value)
 
 
+def _validate_block_reference(value: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise serializers.ValidationError("This field may not be blank.")
+
+    value = value.strip()
+    try:
+        return validate_unit_id(value)
+    except serializers.ValidationError:
+        return value
+
+
 class CourseIdSerializerMixin:
     def validate_course_id(self, value):
         return validate_course_id(value)
@@ -38,7 +49,7 @@ class UsageKeySerializerMixin:
         return _validate_usage_key(value)
 
     def validate_search_id(self, value):
-        return _validate_usage_key(value)
+        return _validate_block_reference(value)
 
 
 class CreateCourseRequestSerializer(serializers.Serializer):
